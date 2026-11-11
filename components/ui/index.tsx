@@ -45,14 +45,16 @@ export function ListRow({ label, value, chevron = true, onClick }: { label: stri
   );
 }
 
-export function TextField({ label, placeholder }: { label: string; placeholder?: string }) {
+export function TextField({ label, placeholder, value, onChange, onSubmit, onMic, autoFocus, name }: { label?: string; placeholder?: string; value?: string; onChange?: (v: string) => void; onSubmit?: () => void; onMic?: () => void; autoFocus?: boolean; name?: string }) {
   const id = useId();
   return (
     <div className="field">
-      <label htmlFor={id} className="label">{label}</label>
+      {label && <label htmlFor={id} className="label">{label}</label>}
       <div className="input-wrap">
-        <input id={id} placeholder={placeholder} />
-        <button className="mic" aria-label="Speak instead"><Icon name="mic" size={22} /></button>
+        <input id={id} name={name} placeholder={placeholder} value={value} autoFocus={autoFocus} autoComplete="off" enterKeyHint="done"
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+          onKeyDown={onSubmit ? (e) => { if (e.key === "Enter") onSubmit(); } : undefined} />
+        {onMic && <button className="mic" aria-label="Speak instead" onClick={onMic}><Icon name="mic" size={22} /></button>}
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ Read `PRODUCT.md` first. This file says how Spal looks and moves. It never overr
 
 **The bar:** Apple and Airbnb level. Few things, each one exact. If a screen needs explaining, it is wrong. If something can be removed without losing meaning, remove it.
 
-**Joshua art directs.** Do not invent a new look. Tokens and components below are a starting point; when Joshua corrects one, update this file so the correction sticks.
+**Joshua art directs.** Do not invent a new look. The tokens, fonts (Playfair Display headlines, Inter text and numerals), mood colours, orb and components below were reviewed live at `/design` and **approved by Joshua on 2026-11-11**. Treat them as locked; change one only when Joshua asks, and update this file in the same change.
 
 References live in `design/references/` (numbered, with what to take from each in the table at the end). Look at them before building. Take the principle, never copy a screen.
 
@@ -54,7 +54,7 @@ If a design choice appears in this list, stop and find the simpler honest option
 
 ### Colour
 
-Define every colour as a CSS variable. Components use only semantic tokens, never raw hex. Values below are starting values with checked contrast (AA body text 4.5:1 or better on their surfaces); tune in the design page, re-check contrast when you change one, then lock.
+Define every colour as a CSS variable. Components use only semantic tokens, never raw hex. Values below are approved and have checked contrast (AA body text 4.5:1 or better on their surfaces); tune in the design page, re-check contrast when you change one, then lock.
 
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
