@@ -4,7 +4,13 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "@/lib/theme";
 
-export const metadata: Metadata = { title: "SPAL Biz", description: "The assistant you can't afford to hire." };
+export const metadata: Metadata = {
+  title: "SPAL Biz",
+  description: "The assistant you can't afford to hire.",
+  applicationName: "Spal",
+  appleWebApp: { capable: true, title: "Spal", statusBarStyle: "default" },
+  icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
+};
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

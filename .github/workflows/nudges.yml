@@ -1,0 +1,16 @@
+name: Spal reminders
+# Wakes the app every 10 minutes so it can check whether anyone is due a reminder.
+# Needs one repository secret: CRON_SECRET (the same value as in Vercel).
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask Spal to check reminders
+        run: |
+          curl -fsS -X POST "https://spal-biz.vercel.app/api/cron/nudges" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 60

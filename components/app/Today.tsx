@@ -14,6 +14,7 @@ import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
 import { SaveAccount } from "./SaveAccount";
 import { DaySheet } from "./DaySheet";
+import { ProfileReminders, ReminderPrompt, useReminders } from "./Reminders";
 
 const greeting = (h: number) => (h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening");
 const DEFAULT_CLOSE_MIN = 18 * 60; // until Spal has learned her habit
@@ -54,6 +55,7 @@ export function Today({ shop }: { shop: Shop }) {
   const [now, setNow] = useState(() => new Date());
   const getToken = useCallback(async () => (await sb.auth.getSession()).data.session?.access_token ?? "", [sb]);
   const voice = useVoice(getToken);
+  const reminders = useReminders(sb, shop.id, getToken);
   useEffect(() => setNow(new Date()), []);
 
   const hour = now.getHours();
@@ -280,6 +282,8 @@ export function Today({ shop }: { shop: Shop }) {
               </Surface>
             )}
 
+            {closes.length > 0 && <ReminderPrompt r={reminders} />}
+
             {reply && (
               <Surface>
                 {reply.status === "failed" ? (
@@ -387,6 +391,7 @@ export function Today({ shop }: { shop: Shop }) {
           {avatar && <Button kind="ghost" small onClick={removePhoto}>Remove</Button>}
         </div>
         {photoErr && <p role="alert" style={{ color: "var(--care-text)", margin: "4px 0 8px" }}>{photoErr}</p>}
+        <ProfileReminders r={reminders} />
         <p className="label" style={{ margin: "16px 0 4px" }}>Closing time</p>
         <div className="row"><span>About {clockLabel(closeMin)}</span><span className="label" style={{ fontSize: 14 }}>{learned ? "learned from you" : "until I learn"}</span></div>
         <p className="label" style={{ margin: "16px 0 4px" }}>Account</p>
