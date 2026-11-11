@@ -248,3 +248,5 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .on-mood { color: var(--mood-ink); }
 .on-mood .btn-ghost { color: var(--mood-ink-2); }
 .on-mood .head { color: var(--mood-ink); }
+.on-mood .label { color: var(--mood-ink-2); }
+.on-mood .surface .label { color: var(--ink-2); }

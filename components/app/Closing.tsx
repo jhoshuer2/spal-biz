@@ -24,7 +24,8 @@ export function Closing({ sb, shopId, ownerFirst, today, recent, todayKey, itemN
   const [err, setErr] = useState<string | null>(null);
 
   // Make sure the first question is based on everything she has told me.
-  useEffect(() => { refresh(); }, [refresh]);
+  const [ready, setReady] = useState(false);
+  useEffect(() => { refresh().finally(() => setReady(true)); }, [refresh]);
 
   const kind = closingCase(today, recent, todayKey);
   const n = countOf(today);
@@ -66,10 +67,12 @@ export function Closing({ sb, shopId, ownerFirst, today, recent, todayKey, itemN
       <div style={{ maxWidth: 560, margin: "0 auto", padding: "16px 20px 32px", minHeight: "100%", display: "flex", flexDirection: "column" }}>
         <div><button className="icon-btn" aria-label="Close" onClick={onClose}><Icon name="x" /></button></div>
         <div style={{ display: "grid", placeItems: "center", padding: "8px 0" }}>
-          <Orb tone="indigo" size={step === "ask" ? 150 : 110} state={busy ? "thinking" : "idle"} />
+          <Orb tone="indigo" size={step === "ask" ? 150 : 110} state={busy || !ready ? "thinking" : "idle"} />
         </div>
 
-        {step === "ask" ? (
+        {!ready ? (
+          <p className="label" style={{ margin: "24px 0", fontSize: 20, textAlign: "center" }}>One moment</p>
+        ) : step === "ask" ? (
           <>
             <h1 className="head" style={{ fontSize: 34, margin: "12px 0 8px" }}>{head}</h1>
             {sub && <p className="label" style={{ margin: "0 0 12px", fontSize: 17 }}>{sub}</p>}

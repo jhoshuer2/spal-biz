@@ -60,5 +60,6 @@ export function summarize(today: DayEvent[], recent: DayEvent[], itemNames: Map<
   if (spent > 0) parts.push(`spent ${naira(spent)}`);
   if (best) parts.push(`${best[0].toUpperCase() + best.slice(1)} sold the most`);
   if (owing[0]) parts.push(`${owing[0].name} owes ${naira(owing[0].kobo)}`);
-  return { total, count, spent, best, owing, delta, text: parts.join(". ") + "." };
+  const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
+  return { total, count, spent, best, owing, delta, text: parts.map(cap).join(". ") + "." };
 }
