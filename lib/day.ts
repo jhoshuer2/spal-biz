@@ -56,10 +56,13 @@ export function summarize(today: DayEvent[], recent: DayEvent[], itemNames: Map<
   const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long" }).format(lastWeek);
   const delta = prev > 0 && total > 0 && total !== prev ? { diff: total - prev, weekday } : null;
 
-  const parts = [count > 0 ? `${naira(total)} from ${count} ${count === 1 ? "sale" : "sales"}` : `About ${naira(total)}`];
+  const parts: string[] = [];
+  if (count > 0) parts.push(`${naira(total)} from ${count} ${count === 1 ? "sale" : "sales"}`);
+  else if (total > 0) parts.push(`About ${naira(total)}`);
   if (spent > 0) parts.push(`spent ${naira(spent)}`);
   if (best) parts.push(`${best[0].toUpperCase() + best.slice(1)} sold the most`);
   if (owing[0]) parts.push(`${owing[0].name} owes ${naira(owing[0].kobo)}`);
   const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
+  if (!parts.length) parts.push("A quiet day. Nothing recorded");
   return { total, count, spent, best, owing, delta, text: parts.map(cap).join(". ") + "." };
 }

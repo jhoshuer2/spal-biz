@@ -123,8 +123,14 @@ export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, today
           </>
         ) : (
           <>
-            <p className="label" style={{ margin: "12px 0 0", fontSize: 17 }}>{summary.count > 0 ? "Today you made" : "Today, about"}</p>
-            <div className="num" style={{ fontSize: 72, margin: "6px 0 14px", color: "var(--mood-ink)" }}><Roll prefix="₦" value={Math.round(summary.total / 100)} /></div>
+            {summary.total > 0 ? (
+              <>
+                <p className="label" style={{ margin: "12px 0 0", fontSize: 17 }}>{summary.count > 0 ? "Today you made" : "Today, about"}</p>
+                <div className="num" style={{ fontSize: 72, margin: "6px 0 14px", color: "var(--mood-ink)" }}><Roll prefix="₦" value={Math.round(summary.total / 100)} /></div>
+              </>
+            ) : (
+              <h1 className="head" style={{ fontSize: 44, margin: "12px 0 16px" }}>A quiet day</h1>
+            )}
             {summary.delta && (
               <div style={{ marginBottom: 16 }}>
                 <DeltaPill tone={summary.delta.diff > 0 ? "good" : "flat"}>
