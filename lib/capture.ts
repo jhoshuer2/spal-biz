@@ -1,30 +1,41 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isNetworkError } from "./outbox";
 
-export type Reply = { captureId: string; note: string; heard?: string; lines: string[]; question: string | null; status: "parsed" | "needs_answer" | "failed"; limited?: boolean; changed?: boolean };
+export type Reply = { captureId: string; note: string; heard?: string; lines: string[]; question: string | null; status: "parsed" | "needs_answer" | "failed"; limited?: boolean; changed?: boolean; offline?: boolean };
 
-/** Keep her words, then ask Spal to understand them. The raw note is always kept, even if reading it fails. */
-export async function sendNote(sb: SupabaseClient, shopId: string, text: string, context?: string, voice?: { blob: Blob }): Promise<{ reply?: Reply; keepFailed?: boolean }> {
+/** Ask Spal to understand a note that is already saved. */
+export async function parseCapture(sb: SupabaseClient, captureId: string, note: string, context?: string, heard?: string): Promise<Reply> {
+  const failed: Reply = { captureId, note, heard, lines: [], question: null, status: "failed" };
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const r = await fetch("/api/parse", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` }, body: JSON.stringify({ capture_id: captureId, context }) });
+    if (r.status === 429) return { ...failed, limited: true };
+    const j = await r.json();
+    if (!r.ok || j.status === "failed") return failed;
+    return { captureId, note, heard, lines: j.lines ?? [], question: j.question ?? null, status: j.status, changed: !!j.changed };
+  } catch (e) {
+    return { ...failed, offline: isNetworkError(e) };
+  }
+}
+
+/**
+ * Keep her words, then ask Spal to understand them. The raw note is always kept, even if reading it fails.
+ * With no signal nothing is lost: `offline` tells the caller to keep it on the phone for later.
+ * `createdAt` is when she really said it, for notes that waited.
+ */
+export async function sendNote(sb: SupabaseClient, shopId: string, text: string, context?: string, voice?: { blob: Blob }, createdAt?: string): Promise<{ reply?: Reply; keepFailed?: boolean; offline?: boolean }> {
   const t = text.trim();
-  const row = voice ? { shop_id: shopId, kind: "voice", transcript: t } : { shop_id: shopId, kind: "text", text_content: t };
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return { offline: true };
+  const base = voice ? { shop_id: shopId, kind: "voice", transcript: t } : { shop_id: shopId, kind: "text", text_content: t };
+  const row = createdAt ? { ...base, created_at: createdAt } : base;
   const { data: cap, error } = await sb.from("capture").insert(row).select("id").single();
-  if (error || !cap) return { keepFailed: true };
+  if (error || !cap) return isNetworkError(error) ? { offline: true } : { keepFailed: true };
   if (voice) {
     // Keep the audio too, so a better parser can re-read it later. Best effort: never blocks her.
     const path = `${shopId}/${cap.id}.${voice.blob.type.includes("mp4") ? "m4a" : "webm"}`;
     sb.storage.from("captures").upload(path, voice.blob, { contentType: voice.blob.type }).then(({ error: e }) => { if (!e) sb.from("capture").update({ media_path: path }).eq("id", cap.id).then(() => {}); });
   }
-  const heard = voice ? t : undefined;
-  const failed: Reply = { captureId: cap.id, note: t, heard, lines: [], question: null, status: "failed" };
-  try {
-    const { data: { session } } = await sb.auth.getSession();
-    const r = await fetch("/api/parse", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` }, body: JSON.stringify({ capture_id: cap.id, context }) });
-    if (r.status === 429) return { reply: { ...failed, limited: true } };
-    const j = await r.json();
-    if (!r.ok || j.status === "failed") return { reply: failed };
-    return { reply: { captureId: cap.id, note: t, heard, lines: j.lines ?? [], question: j.question ?? null, status: j.status, changed: !!j.changed } };
-  } catch {
-    return { reply: failed };
-  }
+  return { reply: await parseCapture(sb, cap.id, t, context, voice ? t : undefined) };
 }
 
 /**

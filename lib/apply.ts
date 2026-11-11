@@ -20,13 +20,14 @@ const isDate = (d: string | null) => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d);
 export type Ctx = {
   sb: SupabaseClient; shopId: string; captureId: string;
   byRef: Map<string, EventRow>;
+  capturedAt?: string; // when she really said it, for notes that waited for signal
   custName: Map<string, string>; itemName: Map<string, string>;
   custIndex: Map<string, string>; itemIndex: Map<string, string>;
 };
 
 /** Carry out what the model asked for: add records, fix saved ones, remove saved ones. Every update or removal keeps a copy of how it was, so it can be undone. */
 export async function applyActions(ctx: Ctx, actions: Action[]) {
-  const { sb, shopId, captureId, byRef, custName, itemName, custIndex, itemIndex } = ctx;
+  const { sb, shopId, captureId, byRef, custName, itemName, custIndex, itemIndex, capturedAt } = ctx;
   const lines: string[] = [];
   let changed = false, wrote = 0, missed = 0, historyFailed = false;
   const touchedCustomers: string[] = [];
@@ -55,7 +56,7 @@ export async function applyActions(ctx: Ctx, actions: Action[]) {
         quantity: a.quantity != null && a.quantity > 0 ? a.quantity : null,
         due_date: isDate(a.due_date) ? a.due_date : null,
         note: clean(a.note) || null, confidence: Math.min(1, Math.max(0, a.confidence ?? 0.5)),
-        ...(when ? { occurred_at: when } : {}),
+        ...(when ? { occurred_at: when } : capturedAt && Date.now() - new Date(capturedAt).getTime() > 120_000 ? { occurred_at: capturedAt } : {}),
       };
       const { error } = await sb.from("event").insert(row);
       if (error) { console.error("add failed", error.message); missed++; continue; }

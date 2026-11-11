@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { reportError } from "@/lib/report";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -37,6 +38,7 @@ export async function POST(req: Request) {
   const r = await fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", headers: { "xi-api-key": key }, body: out });
   if (!r.ok) {
     console.error("stt failed", r.status);
+    await reportError(asUser, null, "Could not turn a voice note into text", { where: "transcribe", status: r.status, bytes: file.size });
     return NextResponse.json({ error: "stt_failed" }, { status: 502 });
   }
   const j = (await r.json()) as { text?: string };

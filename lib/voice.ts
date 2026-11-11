@@ -1,8 +1,9 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isNetworkError } from "./outbox";
 
 export type VoiceState = "idle" | "recording" | "transcribing";
-export type VoiceResult = { text: string; blob: Blob } | { error: "denied" | "unsupported" | "empty" | "failed" | "limited" };
+export type VoiceResult = { text: string; blob: Blob } | { error: "denied" | "unsupported" | "empty" | "failed" | "limited" | "offline"; blob?: Blob };
 
 const MAX_MS = 60_000;
 const MIN_MS = 700;
@@ -87,19 +88,9 @@ export function useVoice(getToken: () => Promise<string>) {
     cleanup();
     if (ms < MIN_MS || blob.size < 1000) { setState("idle"); return { error: "empty" }; }
     setState("transcribing");
-    try {
-      const fd = new FormData();
-      fd.append("audio", blob);
-      const res = await fetch("/api/transcribe", { method: "POST", headers: { Authorization: `Bearer ${await getToken()}` }, body: fd });
-      setState("idle");
-      if (res.status === 429) return { error: "limited" };
-      const j = await res.json();
-      if (!res.ok) return { error: "failed" };
-      return j.text ? { text: j.text as string, blob } : { error: "empty" };
-    } catch {
-      setState("idle");
-      return { error: "failed" };
-    }
+    const out = await transcribe(blob, await getToken().catch(() => ""));
+    setState("idle");
+    return out;
   }, [cleanup, getToken]);
 
   /** Stop and throw the recording away. */
@@ -112,4 +103,19 @@ export function useVoice(getToken: () => Promise<string>) {
   }, [cleanup]);
 
   return { state, level, supported, start, finish, cancel };
+}
+
+/** Turn a recording into words. `offline` keeps the recording so it can be sent later. */
+export async function transcribe(blob: Blob, token: string): Promise<VoiceResult> {
+  try {
+    const fd = new FormData();
+    fd.append("audio", blob);
+    const res = await fetch("/api/transcribe", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+    if (res.status === 429) return { error: "limited" };
+    const j = await res.json();
+    if (!res.ok) return { error: "failed" };
+    return j.text ? { text: j.text as string, blob } : { error: "empty" };
+  } catch (e) {
+    return isNetworkError(e) ? { error: "offline", blob } : { error: "failed" };
+  }
 }

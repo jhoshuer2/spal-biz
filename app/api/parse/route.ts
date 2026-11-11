@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { applyActions, KINDS, type Parsed } from "@/lib/apply";
 import { recordsList, type EventRow } from "@/lib/records";
+import { reportError } from "@/lib/report";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
   if (limErr) console.warn("usage limit not active:", limErr.message);
   else if (within === false) return NextResponse.json({ status: "limited" }, { status: 429 });
 
-  const { data: capture } = await sb.from("capture").select("id, shop_id, text_content, transcript").eq("id", body.capture_id).maybeSingle();
+  const { data: capture } = await sb.from("capture").select("id, shop_id, text_content, transcript, created_at").eq("id", body.capture_id).maybeSingle();
   if (!capture) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const note = (clean(capture.text_content) || clean(capture.transcript)).slice(0, 1500);
   if (!note) return NextResponse.json({ error: "empty" }, { status: 400 });
@@ -134,8 +135,10 @@ export async function POST(req: Request) {
     parsed = JSON.parse(raw) as Parsed;
     if (!Array.isArray(parsed.actions)) throw new Error("bad shape");
   } catch (e) {
-    console.error("parse failed", e instanceof Error ? e.message.slice(0, 300) : e);
+    const why = e instanceof Error ? e.message.slice(0, 300) : String(e);
+    console.error("parse failed", why);
     await sb.from("capture").update({ status: "failed" }).eq("id", capture.id);
+    await reportError(sb, shopId, "Could not read a note", { where: "parse", why, status: (e as { status?: number }).status ?? null, capture_id: capture.id });
     return NextResponse.json({ status: "failed", reason: "model" }, { status: 502 });
   }
 
@@ -145,7 +148,7 @@ export async function POST(req: Request) {
   for (const i of items ?? []) [i.name, ...(i.aliases ?? [])].forEach((n: string) => itemIndex.set(norm(n), i.id));
 
   const { lines, changed, wrote, missed, touchedCustomers, historyFailed } = await applyActions(
-    { sb, shopId, captureId: capture.id as string, byRef, custName, itemName, custIndex, itemIndex }, parsed.actions ?? []);
+    { sb, shopId, captureId: capture.id as string, capturedAt: capture.created_at as string, byRef, custName, itemName, custIndex, itemIndex }, parsed.actions ?? []);
 
   if (touchedCustomers.length) await sb.from("customer").update({ last_seen_at: new Date().toISOString() }).in("id", [...new Set(touchedCustomers)]);
 
@@ -153,6 +156,7 @@ export async function POST(req: Request) {
   if (!wrote) {
     await sb.from("capture").update({ status: "needs_answer" }).eq("id", capture.id);
     if (historyFailed) {
+      await reportError(sb, shopId, "Correction history table is missing", { where: "parse", capture_id: capture.id });
       return NextResponse.json({ status: "needs_answer", lines: [], question: "I can't change saved records just yet. My setup isn't finished.", changed: false, reason: "history_missing" });
     }
     if (!question) question = missed ? "Which one do you mean? Tell me a bit more." : "Sorry, I didn't catch that. How much was it?";

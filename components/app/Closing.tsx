@@ -12,11 +12,12 @@ type Props = {
   today: DayEvent[]; recent: DayEvent[]; todayKey: string;
   itemNames: Map<string, string>; owing: { name: string; kobo: number }[];
   refresh: () => Promise<void>;
+  onOffline: (text: string | undefined, blob: Blob | undefined, context: string | undefined) => void;
   onClose: () => void; onClosed: (s: Summary) => void;
 };
 
 /** Spal speaks first, fits the question to the day she had, then gives the summary. */
-export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, todayKey, itemNames, owing, refresh, onClose, onClosed }: Props) {
+export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, todayKey, itemNames, owing, refresh, onOffline, onClose, onClosed }: Props) {
   const [step, setStep] = useState<"ask" | "summary">("ask");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,6 +47,7 @@ export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, today
       setBusy(true);
       const r = await voice.finish();
       setBusy(false);
+      if ("error" in r && r.error === "offline" && r.blob) { onOffline(undefined, r.blob, undefined); setErr("No signal. I've saved your recording and will read it when you're back online."); return; }
       if ("error" in r) { setErr(r.error === "empty" ? "I didn't hear anything. Try again." : r.error === "limited" ? "That's a lot of talking for one day. You can still type to me." : "I couldn't hear that. You can type it instead."); return; }
       await submit(r.text, r.blob);
       return;
@@ -61,8 +63,9 @@ export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, today
     setBusy(true);
     setErr(null);
     const ctx = question ? `${question.note} | Spal asked: ${question.question}` : undefined;
-    const { reply, keepFailed } = await sendNote(sb, shopId, t, ctx, voiceBlob ? { blob: voiceBlob } : undefined);
+    const { reply, keepFailed, offline } = await sendNote(sb, shopId, t, ctx, voiceBlob ? { blob: voiceBlob } : undefined);
     setBusy(false);
+    if (offline || reply?.offline) { onOffline(t, voiceBlob, ctx); setNote(""); setErr("No signal. I've saved that on your phone and will read it when you're back online."); return; }
     if (keepFailed || !reply) { setErr("I couldn't keep that. Please try again."); return; }
     setNote("");
     if (reply.status === "failed") { setErr(reply.limited ? "That's a lot for one day. I've kept your note and we'll carry on tomorrow." : "I kept your note, but couldn't read it just now."); return; }

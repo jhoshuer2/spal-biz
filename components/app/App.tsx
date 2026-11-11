@@ -3,11 +3,13 @@ import { useCallback, useEffect, useState } from "react";
 import { supabaseBrowser, type Shop } from "@/lib/supabase";
 import { getCaptchaToken, warmCaptcha } from "@/lib/captcha";
 import { Orb } from "@/components/ui";
+import { watchErrors } from "@/lib/report";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { Onboarding } from "./Onboarding";
 import { Today } from "./Today";
 
-type View = { kind: "loading" } | { kind: "onboarding" } | { kind: "today"; shop: Shop } | { kind: "offline" };
+type View = { kind: "loading" } | { kind: "onboarding" } | { kind: "today"; shop: Shop; offline?: boolean } | { kind: "offline" };
+const CACHE = "spal-shop";
 
 /** Opens straight into the product. A private account is created silently; she is asked to save it later. */
 export function App() {
@@ -31,14 +33,27 @@ export function App() {
       if (shop) {
         const t = (shop as Shop).theme;
         if (t === "light" || t === "dark" || t === "auto") setMode(t as ThemeMode);
+        try { localStorage.setItem(CACHE, JSON.stringify(shop)); } catch { /* storage full or blocked */ }
         setView({ kind: "today", shop: shop as Shop });
       } else setView({ kind: "onboarding" });
     } catch {
-      setView({ kind: "offline" });
+      // No signal: open with what we last knew, so she can still tell Spal things.
+      let cached: Shop | null = null;
+      try { cached = JSON.parse(localStorage.getItem(CACHE) ?? "null"); } catch { /* ignore */ }
+      if (cached && navigator.onLine === false) setView({ kind: "today", shop: cached, offline: true });
+      else setView({ kind: "offline" });
     }
   }, [setMode]);
 
   useEffect(() => { load(); }, [load]);
+  // Let the app open without signal, and pick up again when it returns.
+  useEffect(() => { if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") navigator.serviceWorker.register("/sw.js").catch(() => {}); }, []);
+  useEffect(() => {
+    const back = () => setView((v) => { if (v.kind === "today" && v.offline) { load(); return { kind: "loading" }; } return v; });
+    window.addEventListener("online", back);
+    return () => window.removeEventListener("online", back);
+  }, [load]);
+  useEffect(() => watchErrors(supabaseBrowser(), () => null), []);
 
   async function create(a: { name: string; sells: string; shop: string }) {
     setBusy(true);
@@ -74,5 +89,5 @@ export function App() {
       </main>
     );
   if (view.kind === "onboarding") return <Onboarding onDone={create} busy={busy} error={error} />;
-  return <Today shop={view.shop} />;
+  return <Today shop={view.shop} offline={view.offline} />;
 }

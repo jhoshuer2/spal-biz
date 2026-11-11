@@ -1,19 +1,22 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, DeltaPill, Icon, ListRow, Orb, Roll, Sheet, Surface, TabBar, TalkButton, TextField, type Place } from "@/components/ui";
-import { sendNote, undoNote, type Reply } from "@/lib/capture";
+import { parseCapture, sendNote, undoNote, type Reply } from "@/lib/capture";
+import { flush, newId, phoneStore, type NewItem, type OutboxItem } from "@/lib/outbox";
 import { clockLabel, dayKey, forDay, keyOf, learnCloseMinutes, minutesOf, salesOf, spentOf, timeOf, type DayEvent, type Summary } from "@/lib/day";
 import { squarePhoto } from "@/lib/image";
 import { naira } from "@/lib/format";
 import type { Shop } from "@/lib/supabase";
 import { supabaseBrowser } from "@/lib/supabase";
 import { useTheme, type ThemeMode } from "@/lib/theme";
-import { useVoice } from "@/lib/voice";
+import { transcribe, useVoice } from "@/lib/voice";
 import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
 import { SaveAccount } from "./SaveAccount";
 import { SetPassword } from "./SetPassword";
+import { Feedback } from "./Feedback";
+import { YourData } from "./YourData";
 import { DaySheet } from "./DaySheet";
 import { ProfileReminders, ReminderPrompt, useReminders } from "./Reminders";
 
@@ -24,7 +27,7 @@ type Owing = { name: string; kobo: number };
 type Close = { day: string; total_kobo: number | null; summary: string | null };
 type Remind = { proposalId: string; customerId: string; name: string; phone: string | null; title: string; draft: string };
 
-export function Today({ shop }: { shop: Shop }) {
+export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean }) {
   const { mode, setMode } = useTheme();
   const sb = supabaseBrowser();
   const [place, setPlace] = useState<Place>("today");
@@ -53,6 +56,11 @@ export function Today({ shop }: { shop: Shop }) {
   const [email, setEmail] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [dataOpen, setDataOpen] = useState(false);
+  const [queued, setQueued] = useState(0);
+  const [online, setOnline] = useState(true);
+  const flushing = useRef(false);
   const [talkMode, setTalkMode] = useState<"voice" | "text">("text");
   const [now, setNow] = useState(() => new Date());
   const getToken = useCallback(async () => (await sb.auth.getSession()).data.session?.access_token ?? "", [sb]);
@@ -116,6 +124,59 @@ export function Today({ shop }: { shop: Shop }) {
     setRemind(next);
   }, [sb, shop.id, shop.name]);
   useEffect(() => { refresh(); }, [refresh]);
+
+  // ---- No signal: keep her words on the phone and send them, in order, when it comes back ----
+  const refreshQueue = useCallback(async () => { try { setQueued((await phoneStore.all()).length); } catch { /* storage unavailable */ } }, []);
+
+  const keepForLater = useCallback(async (item: NewItem) => {
+    try { await phoneStore.put({ ...item, id: newId(), at: new Date().toISOString() } as OutboxItem); } catch { /* storage unavailable */ }
+    await refreshQueue();
+  }, [refreshQueue]);
+
+  const flushQueue = useCallback(async () => {
+    if (flushing.current || (typeof navigator !== "undefined" && navigator.onLine === false)) return;
+    flushing.current = true;
+    try {
+      const out = await flush(phoneStore, async (it) => {
+        const giveUp = async () => { // not a signal problem: try a few times, then stop so one bad note never blocks the rest
+          const tries = ((it as { tries?: number }).tries ?? 0) + 1;
+          if (tries >= 5) return "done" as const;
+          await phoneStore.put({ ...it, tries });
+          return "retry" as const;
+        };
+        if (it.kind === "parse") {
+          const rep = await parseCapture(sb, it.captureId, it.text, it.context);
+          return rep.offline ? "retry" : "done";
+        }
+        let text = it.text ?? "";
+        if (!text && it.blob) {
+          const t = await transcribe(it.blob, await getToken().catch(() => ""));
+          if ("error" in t) return t.error === "offline" || t.error === "limited" ? "retry" : t.error === "empty" ? "done" : giveUp();
+          text = t.text;
+        }
+        if (!text.trim()) return "done";
+        const res = await sendNote(sb, shop.id, text, it.context, it.blob ? { blob: it.blob } : undefined, it.at);
+        if (res.offline) return "retry";
+        if (res.keepFailed) return giveUp();
+        if (res.reply?.offline) { await phoneStore.put({ id: newId(), kind: "parse", at: it.at, captureId: res.reply.captureId, text: res.reply.note, context: it.context }); }
+        return "done";
+      });
+      await refreshQueue();
+      if (out.sent > 0) refresh();
+    } finally { flushing.current = false; }
+  }, [sb, shop.id, getToken, refresh, refreshQueue]);
+
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    refreshQueue().then(flushQueue);
+    const on = () => { setOnline(true); flushQueue(); };
+    const off = () => setOnline(false);
+    const vis = () => { if (document.visibilityState === "visible") flushQueue(); };
+    window.addEventListener("online", on); window.addEventListener("offline", off); document.addEventListener("visibilitychange", vis);
+    const t = setInterval(flushQueue, 30_000);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); document.removeEventListener("visibilitychange", vis); clearInterval(t); };
+  }, [refreshQueue, flushQueue]);
+  const noSignal = offline || !online;
   useEffect(() => {
     sb.auth.getUser().then(({ data }) => { setAnonymous(!!data.user?.is_anonymous); setEmail(data.user?.email ?? null); });
   }, [sb]);
@@ -134,9 +195,11 @@ export function Today({ shop }: { shop: Shop }) {
     if (!t || busy) return;
     setBusy(true);
     setErr(null);
-    const { reply: r, keepFailed } = await sendNote(sb, shop.id, t, context, voiceBlob ? { blob: voiceBlob } : undefined);
+    const { reply: r, keepFailed, offline: gone } = await sendNote(sb, shop.id, t, context, voiceBlob ? { blob: voiceBlob } : undefined);
     setBusy(false);
+    if (gone) { await keepForLater({ kind: "note", text: t, blob: voiceBlob, context }); setNote(""); setAnswer(""); setTalk(false); setReply(null); return; }
     if (keepFailed || !r) { setErr("I couldn't keep that. Please try again."); return; }
+    if (r.offline) { await keepForLater({ kind: "parse", captureId: r.captureId, text: r.note, context }); setNote(""); setAnswer(""); setTalk(false); setReply(null); return; }
     setNote(""); setAnswer(""); setTalk(false); setReply(r);
     refresh();
   }
@@ -155,6 +218,7 @@ export function Today({ shop }: { shop: Shop }) {
 
   async function stopAndSend() {
     const r = await voice.finish();
+    if ("error" in r && r.error === "offline" && r.blob) { await keepForLater({ kind: "note", blob: r.blob }); setTalk(false); setTalkMode("text"); return; }
     if ("error" in r) {
       setErr(r.error === "empty" ? "I didn't hear anything. Tap the button and try again." : r.error === "limited" ? "That's a lot of talking for one day. You can still type to me." : "I couldn't hear that. You can type it instead.");
       setTalkMode("text");
@@ -290,8 +354,11 @@ export function Today({ shop }: { shop: Shop }) {
               <Surface>
                 {reply.status === "failed" ? (
                   <>
-                    <p style={bigLine}>{reply.limited ? "That's a lot for one day. I've kept your note and we'll carry on tomorrow." : "I kept your note, but I couldn't read it just now. I'll try again in a moment."}</p>
-                    <div style={{ marginTop: 12 }}><Button kind="ghost" small onClick={() => setReply(null)}>OK</Button></div>
+                    <p style={bigLine}>{reply.limited ? "That's a lot for one day. I've kept your note and we'll carry on tomorrow." : "I kept your note, but I couldn't read it just now."}</p>
+                    <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+                      {!reply.limited && <Button small disabled={busy} onClick={async () => { setBusy(true); const again = await parseCapture(sb, reply.captureId, reply.note, undefined, reply.heard); setBusy(false); setReply(again); refresh(); }}>{busy ? "One moment" : "Try again"}</Button>}
+                      <Button kind="ghost" small onClick={() => setReply(null)}>OK</Button>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -320,13 +387,22 @@ export function Today({ shop }: { shop: Shop }) {
               </Surface>
             )}
 
-            {hasToday ? (
+            {(noSignal || queued > 0) && (
+              <Surface>
+                <p style={bigLine}>{noSignal ? "No signal. You can still tell me things." : `${queued} ${queued === 1 ? "note is" : "notes are"} waiting to be read.`}</p>
+                <p className="label" style={{ margin: "8px 0 0", fontSize: 16 }}>
+                  {queued > 0 ? `${queued} ${queued === 1 ? "note is" : "notes are"} saved on your phone. I'll read ${queued === 1 ? "it" : "them"} as soon as you're back online.` : "I'll keep what you say on your phone and read it when you're back online."}
+                </p>
+              </Surface>
+            )}
+
+            {!noSignal && hasToday ? (
               <button className="surface tap-card" onClick={() => setDetail(todayKey)} aria-label="See what is behind today's number">
                 <span className="label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>Today so far <Icon name="chevron" size={20} /></span>
                 <span className="num" style={{ fontSize: 64, marginTop: 14, display: "block" }}><Roll prefix="₦" value={Math.round(sales / 100)} /></span>
                 {spent > 0 && <span style={{ marginTop: 14, display: "block" }}><DeltaPill tone="flat">Spent {naira(spent)}</DeltaPill></span>}
               </button>
-            ) : !reply && !evening ? (
+            ) : !noSignal && !reply && !evening ? (
               <Surface>
                 <p style={bigLine}>
                   {lastClose?.total_kobo
@@ -403,6 +479,12 @@ export function Today({ shop }: { shop: Shop }) {
         </div>
         {photoErr && <p role="alert" style={{ color: "var(--care-text)", margin: "4px 0 8px" }}>{photoErr}</p>}
         <ProfileReminders r={reminders} />
+        <p className="label" style={{ margin: "16px 0 4px" }}>Your data</p>
+        <button className="row" onClick={() => { setProfile(false); setDataOpen(true); }}><span>Download or delete my data</span><Icon name="chevron" size={20} /></button>
+        <p className="label" style={{ margin: "16px 0 4px" }}>Help</p>
+        <button className="row" onClick={() => { setProfile(false); setFeedbackOpen(true); }}><span>Something wrong? Tell us</span><Icon name="chevron" size={20} /></button>
+        <a className="row" href="/privacy" style={{ textDecoration: "none", color: "inherit" }}><span>Privacy</span><Icon name="chevron" size={20} /></a>
+        <a className="row" href="/terms" style={{ textDecoration: "none", color: "inherit" }}><span>Terms</span><Icon name="chevron" size={20} /></a>
         <p className="label" style={{ margin: "16px 0 4px" }}>Closing time</p>
         <div className="row"><span>About {clockLabel(closeMin)}</span><span className="label" style={{ fontSize: 14 }}>{learned ? "learned from you" : "until I learn"}</span></div>
         <p className="label" style={{ margin: "16px 0 4px" }}>Account</p>
@@ -425,12 +507,16 @@ export function Today({ shop }: { shop: Shop }) {
 
       <DaySheet open={detail !== null} onClose={() => setDetail(null)} sb={sb} shopId={shop.id} onChanged={refresh} startKey={detail ?? todayKey} todayKey={todayKey} custNames={custNames} itemNames={itemNames} />
 
+      <YourData open={dataOpen} onClose={() => setDataOpen(false)} sb={sb} shopName={shop.name} />
+
+      <Feedback open={feedbackOpen} onClose={() => setFeedbackOpen(false)} sb={sb} shopId={shop.id} lastCaptureId={reply?.captureId ?? null} />
+
       <SetPassword open={pwOpen} onClose={() => setPwOpen(false)} sb={sb} email={email} />
 
       <SaveAccount open={saveOpen} onClose={() => setSaveOpen(false)} sb={sb} ownerFirst={first} />
 
       {closing && (
-        <Closing sb={sb} getToken={getToken} shopId={shop.id} ownerFirst={first} today={today} recent={recent} todayKey={todayKey} itemNames={itemNames} owing={owing} refresh={refresh} onClose={() => setClosing(false)} onClosed={closeDay} />
+        <Closing sb={sb} getToken={getToken} shopId={shop.id} ownerFirst={first} today={today} recent={recent} todayKey={todayKey} itemNames={itemNames} owing={owing} refresh={refresh} onOffline={(t, b, c) => keepForLater({ kind: "note", text: t, blob: b, context: c })} onClose={() => setClosing(false)} onClosed={closeDay} />
       )}
     </main>
   );

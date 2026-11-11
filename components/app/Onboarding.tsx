@@ -45,6 +45,7 @@ export function Onboarding({ onDone, error, busy }: { onDone: (a: Answers) => vo
         {step > 0 && !busy && <Button kind="ghost" block onClick={() => setStep(step - 1)}>Back</Button>}
         {step === 0 && !busy && <Button kind="ghost" block onClick={() => setSignin(true)}>I already use Spal</Button>}
       </div>
+      <p className="label" style={{ textAlign: "center", fontSize: 14, margin: "0 20px 20px" }}>By continuing you agree to our <a href="/terms" style={{ textDecoration: "underline" }}>Terms</a> and <a href="/privacy" style={{ textDecoration: "underline" }}>Privacy</a>.</p>
       <SaveAccount open={signin} onClose={() => setSignin(false)} sb={supabaseBrowser()} mode="signin" />
     </main>
   );
