@@ -29,8 +29,14 @@ const SAMPLE: Row[] = [
   { id: "4", kind: "payment_received", amount_kobo: 500000, occurred_at: at(15, 30), item_id: null, quantity: null, customer_id: "emeka", note: null, due_date: null },
   { id: "5", kind: "expense", amount_kobo: 300000, occurred_at: at(16, 2), item_id: null, quantity: null, customer_id: null, note: "fuel", due_date: null },
 ];
+const BUSY: Row[] = [
+  ...Array.from({ length: 140 }, (_, i): Row => ({ id: `b${i}`, kind: i % 17 === 0 ? "credit_sale" : "sale", amount_kobo: (300 + ((i * 137) % 4200)) * 100, occurred_at: at(8 + Math.floor(i / 12), (i * 7) % 60), item_id: ["rice", "milk", "bread", "sugar", "oil"][i % 5], quantity: 1 + (i % 4), customer_id: i % 17 === 0 ? "blessing" : i % 9 === 0 ? "chidi" : null, note: null, due_date: i % 17 === 0 ? "2026-11-13" : null })),
+  { id: "x1", kind: "expense", amount_kobo: 300000, occurred_at: at(10, 5), item_id: null, quantity: null, customer_id: null, note: "fuel", due_date: null },
+  { id: "x2", kind: "expense", amount_kobo: 150000, occurred_at: at(13, 20), item_id: null, quantity: null, customer_id: null, note: "transport", due_date: null },
+  { id: "x3", kind: "payment_received", amount_kobo: 500000, occurred_at: at(15, 30), item_id: null, quantity: null, customer_id: "emeka", note: null, due_date: null },
+];
 const SAMPLE_CUST = new Map([["chidi", "Mama Chidi"], ["blessing", "Blessing"], ["emeka", "Emeka"]]);
-const SAMPLE_ITEMS = new Map([["rice", "bag of rice"]]);
+const SAMPLE_ITEMS = new Map([["rice", "bag of rice"], ["milk", "tin of milk"], ["bread", "bread"], ["sugar", "sugar"], ["oil", "palm oil"]]);
 
 function useLevel(active: boolean) {
   const [level, setLevel] = useState(0);
@@ -153,7 +159,10 @@ export default function DesignPage() {
 
       {/* Day details */}
       <Section title="Behind the number">
+        <p className="label" style={{ margin: "0 0 8px" }}>A quiet day</p>
         <Surface><div style={{ maxWidth: 430 }}><DayDetail rows={SAMPLE} custNames={SAMPLE_CUST} itemNames={SAMPLE_ITEMS} /></div></Surface>
+        <p className="label" style={{ margin: "24px 0 8px" }}>A busy day: 140 sales, scroll inside the box</p>
+        <div className="surface" style={{ maxWidth: 470, maxHeight: 620, overflowY: "auto", padding: "12px 20px" }}><DayDetail header={<h2 className="head" style={{ fontSize: 24, margin: "0 0 12px" }}>Today</h2>} rows={BUSY} custNames={SAMPLE_CUST} itemNames={SAMPLE_ITEMS} /></div>
       </Section>
 
       {/* Orb */}

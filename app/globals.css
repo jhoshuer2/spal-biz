@@ -258,3 +258,10 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .icon-btn.photo { padding: 0; overflow: hidden; }
 .tap-card { cursor: pointer; transition: transform 0.12s ease-out; text-align: left; border: 0; width: 100%; font: inherit; }
 .tap-card:active { transform: scale(0.99); }
+
+/* Day details: the Sold and Spent tiles stay in view while the list scrolls */
+.day-sticky { position: sticky; top: -12px; z-index: 2; background: var(--surface); margin: -12px -20px 0; padding: 12px 20px 12px; box-shadow: 0 1px 0 var(--line); }
+.day-tile { text-align: left; border: 0; font: inherit; color: var(--ink); background: var(--surface-2); border-radius: 18px; padding: 14px 16px; display: block; min-height: 96px; transition: transform 0.12s ease-out, background 0.15s; }
+.day-tile:active { transform: scale(0.98); }
+.day-tile[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.day-tile .num { color: inherit; }
