@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { Button, Chip, DeltaPill, Icon, ListRow, Orb, ProposalCard, Roll, Segmented, Sheet, Surface, TabBar, TalkButton, TextField, Toggle, type Place } from "@/components/ui";
 import type { OrbState, OrbTone } from "@/components/ui/Orb";
+import { DayDetail, type Row } from "@/components/app/DaySheet";
 
 type Mood = "strong" | "normal" | "slow" | "evening";
 type Range = "day" | "week" | "month";
@@ -18,6 +19,18 @@ const STATS: Record<Range, { value: number; label: string; delta: string }> = {
   week: { value: 214300, label: "This week", delta: "₦21,500 more than last week" },
   month: { value: 912800, label: "This month", delta: "₦64,000 more than last month" },
 };
+
+
+const at = (h: number, m: number) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
+const SAMPLE: Row[] = [
+  { id: "1", kind: "sale", amount_kobo: 450000, occurred_at: at(9, 12), item_id: null, quantity: null, customer_id: null, note: "3 milk, 1 sugar", due_date: null },
+  { id: "2", kind: "sale", amount_kobo: 3000000, occurred_at: at(11, 40), item_id: "rice", quantity: 2, customer_id: "chidi", note: null, due_date: null },
+  { id: "3", kind: "credit_sale", amount_kobo: 1200000, occurred_at: at(14, 5), item_id: "rice", quantity: 1, customer_id: "blessing", note: null, due_date: "2026-11-13" },
+  { id: "4", kind: "payment_received", amount_kobo: 500000, occurred_at: at(15, 30), item_id: null, quantity: null, customer_id: "emeka", note: null, due_date: null },
+  { id: "5", kind: "expense", amount_kobo: 300000, occurred_at: at(16, 2), item_id: null, quantity: null, customer_id: null, note: "fuel", due_date: null },
+];
+const SAMPLE_CUST = new Map([["chidi", "Mama Chidi"], ["blessing", "Blessing"], ["emeka", "Emeka"]]);
+const SAMPLE_ITEMS = new Map([["rice", "bag of rice"]]);
 
 function useLevel(active: boolean) {
   const [level, setLevel] = useState(0);
@@ -136,6 +149,11 @@ export default function DesignPage() {
           <p className="label" style={{ margin: "12px 0 0" }}>Ẹ kú àárọ̀ · Ọjọ́ òní · Ṣé ó dára? · Ị mere ọ́ma · Ụlọ ahịa</p>
           <p className="muted" style={{ fontSize: 13, margin: "12px 0 0" }}>Headlines: Neue Haas Grotesk Display (shown here with Inter Tight until the licensed files arrive). Text and numerals: Source Sans 3, light for big numbers. Both stand-ins cover ₦ and the Yoruba and Igbo marks.</p>
         </Surface>
+      </Section>
+
+      {/* Day details */}
+      <Section title="Behind the number">
+        <Surface><div style={{ maxWidth: 430 }}><DayDetail rows={SAMPLE} custNames={SAMPLE_CUST} itemNames={SAMPLE_ITEMS} /></div></Surface>
       </Section>
 
       {/* Orb */}

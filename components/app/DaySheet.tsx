@@ -5,7 +5,7 @@ import { dayKey, salesOf, spentOf, type DayEvent } from "@/lib/day";
 import { naira } from "@/lib/format";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type Row = DayEvent & { id: string; customer_id: string | null; note: string | null; due_date: string | null };
+export type Row = DayEvent & { id: string; customer_id: string | null; note: string | null; due_date: string | null };
 
 const parseKey = (k: string) => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
 const shift = (k: string, by: number) => { const d = parseKey(k); d.setDate(d.getDate() + by); return dayKey(d); };
@@ -42,8 +42,27 @@ export function DaySheet({ open, onClose, sb, startKey, todayKey, custNames, ite
     return () => { live = false; };
   }, [open, key, sb]);
 
-  const sales = rows ? salesOf(rows) : 0;
-  const spent = rows ? spentOf(rows) : 0;
+  return (
+    <Sheet open={open} onClose={onClose} title="Day details">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <button className="icon-btn" style={{ background: "var(--surface-2)" }} aria-label="Earlier day" onClick={() => setKey(shift(key, -1))}><span style={{ transform: "rotate(180deg)", display: "grid" }}><Icon name="chevron" /></span></button>
+        <h2 className="head" style={{ fontSize: 24, margin: 0 }}>{dayName(key, todayKey)}</h2>
+        <button className="icon-btn" style={{ background: "var(--surface-2)", opacity: key >= todayKey ? 0.3 : 1 }} aria-label="Later day" disabled={key >= todayKey} onClick={() => setKey(shift(key, 1))}><Icon name="chevron" /></button>
+      </div>
+
+      {rows === null ? (
+        <p className="label" style={{ textAlign: "center", margin: "32px 0" }}>One moment</p>
+      ) : (
+        <DayDetail rows={rows} custNames={custNames} itemNames={itemNames} />
+      )}
+    </Sheet>
+  );
+}
+
+/** The numbers and every entry behind them. Pure display, so it can be checked on its own. */
+export function DayDetail({ rows, custNames, itemNames }: { rows: Row[]; custNames: Map<string, string>; itemNames: Map<string, string> }) {
+  const sales = salesOf(rows);
+  const spent = spentOf(rows);
 
   const title = (r: Row) => {
     const item = r.item_id ? itemNames.get(r.item_id) : null;
@@ -57,42 +76,29 @@ export function DaySheet({ open, onClose, sb, startKey, todayKey, custNames, ite
     return [who && r.kind !== "payment_received" ? who : null, due, clock(r.occurred_at)].filter(Boolean).join(" · ");
   };
 
+  if (rows.length === 0) return <p className="label" style={{ textAlign: "center", margin: "32px 0", fontSize: 17 }}>Nothing recorded this day.</p>;
   return (
-    <Sheet open={open} onClose={onClose} title="Day details">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <button className="icon-btn" style={{ background: "var(--surface-2)" }} aria-label="Earlier day" onClick={() => setKey(shift(key, -1))}><span style={{ transform: "rotate(180deg)", display: "grid" }}><Icon name="chevron" /></span></button>
-        <h2 className="head" style={{ fontSize: 24, margin: 0 }}>{dayName(key, todayKey)}</h2>
-        <button className="icon-btn" style={{ background: "var(--surface-2)", opacity: key >= todayKey ? 0.3 : 1 }} aria-label="Later day" disabled={key >= todayKey} onClick={() => setKey(shift(key, 1))}><Icon name="chevron" /></button>
-      </div>
-
-      {rows === null ? (
-        <p className="label" style={{ textAlign: "center", margin: "32px 0" }}>One moment</p>
-      ) : rows.length === 0 ? (
-        <p className="label" style={{ textAlign: "center", margin: "32px 0", fontSize: 17 }}>Nothing recorded this day.</p>
-      ) : (
-        <>
-          <div className="num" style={{ fontSize: 48 }}>{naira(sales)}</div>
-          {spent > 0 && <div style={{ marginTop: 10 }}><DeltaPill tone="flat">Spent {naira(spent)}</DeltaPill></div>}
-          {SECTIONS.map((sec) => {
-            const list = rows.filter((r) => sec.kinds.includes(r.kind));
-            if (!list.length) return null;
-            return (
-              <div key={sec.title} style={{ marginTop: 20 }}>
-                <p className="label" style={{ margin: "0 0 2px" }}>{sec.title}</p>
-                {list.map((r) => (
-                  <div key={r.id} className="row" style={{ minHeight: 64, alignItems: "center" }}>
-                    <span style={{ minWidth: 0 }}>
-                      <span style={{ display: "block", fontWeight: 500 }}>{title(r)}</span>
-                      <span className="label" style={{ display: "block", fontSize: 14 }}>{sub(r)}</span>
-                    </span>
-                    {r.amount_kobo != null && <span style={{ fontWeight: 600, whiteSpace: "nowrap", color: r.kind === "expense" ? "var(--ink-2)" : r.kind === "credit_sale" ? "var(--care-text)" : "var(--ink)" }}>{naira(r.amount_kobo)}</span>}
-                  </div>
-                ))}
+    <>
+      <div className="num" style={{ fontSize: 48 }}>{naira(sales)}</div>
+      {spent > 0 && <div style={{ marginTop: 10 }}><DeltaPill tone="flat">Spent {naira(spent)}</DeltaPill></div>}
+      {SECTIONS.map((sec) => {
+        const list = rows.filter((r) => sec.kinds.includes(r.kind));
+        if (!list.length) return null;
+        return (
+          <div key={sec.title} style={{ marginTop: 20 }}>
+            <p className="label" style={{ margin: "0 0 2px" }}>{sec.title}</p>
+            {list.map((r) => (
+              <div key={r.id} className="row" style={{ minHeight: 64, alignItems: "center" }}>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", fontWeight: 500 }}>{title(r)}</span>
+                  <span className="label" style={{ display: "block", fontSize: 14 }}>{sub(r)}</span>
+                </span>
+                {r.amount_kobo != null && <span style={{ fontWeight: 600, whiteSpace: "nowrap", color: r.kind === "expense" ? "var(--ink-2)" : r.kind === "credit_sale" ? "var(--care-text)" : "var(--ink)" }}>{naira(r.amount_kobo)}</span>}
               </div>
-            );
-          })}
-        </>
-      )}
-    </Sheet>
+            ))}
+          </div>
+        );
+      })}
+    </>
   );
 }
