@@ -13,6 +13,7 @@ import { transcribe, useVoice } from "@/lib/voice";
 import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
+import { draftWinBack, lapsedRegulars, winBackTitle, type Visit } from "@/lib/regulars";
 import { SaveAccount } from "./SaveAccount";
 import { SetPassword } from "./SetPassword";
 import { Feedback } from "./Feedback";
@@ -25,7 +26,7 @@ const DEFAULT_CLOSE_MIN = 18 * 60; // until Spal has learned her habit
 
 type Owing = { name: string; kobo: number };
 type Close = { day: string; total_kobo: number | null; summary: string | null };
-type Remind = { proposalId: string; customerId: string; name: string; phone: string | null; title: string; draft: string };
+type Remind = { kind?: "debt_reminder" | "win_back"; proposalId: string; customerId: string; name: string; phone: string | null; title: string; draft: string };
 
 export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean }) {
   const { mode, setMode } = useTheme();
@@ -77,15 +78,16 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     since.setDate(since.getDate() - 14);
     since.setHours(0, 0, 0, 0);
     const props = new Date();
-    props.setDate(props.getDate() - 3);
-    const [{ data: ev }, { data: debts }, { data: custs }, { data: items }, { data: dc }, { data: props_ }, { data: credits }] = await Promise.all([
+    props.setDate(props.getDate() - 15);
+    const [{ data: ev }, { data: debts }, { data: custs }, { data: items }, { data: dc }, { data: props_ }, { data: credits }, { data: visitsRaw }] = await Promise.all([
       sb.from("event").select("kind, amount_kobo, occurred_at, item_id, quantity").gte("occurred_at", since.toISOString()),
       sb.from("debt").select("customer_id, owed_kobo, next_due"),
       sb.from("customer").select("id, name, phone"),
       sb.from("item").select("id, name"),
       sb.from("day_close").select("day, total_kobo, summary").order("day", { ascending: false }).limit(3),
-      sb.from("proposal").select("id, customer_id, draft_text, status, created_at").eq("kind", "debt_reminder").gte("created_at", props.toISOString()),
+      sb.from("proposal").select("id, customer_id, kind, draft_text, status, created_at").in("kind", ["debt_reminder", "win_back"]).gte("created_at", props.toISOString()),
       sb.from("event").select("customer_id, note, item_id").eq("kind", "credit_sale").order("occurred_at", { ascending: false }).limit(200),
+      sb.from("event").select("customer_id, occurred_at, item_id").in("kind", ["sale", "credit_sale"]).not("customer_id", "is", null).gte("occurred_at", new Date(Date.now() - 120 * 86_400_000).toISOString()).limit(3000),
     ]);
     setRecent((ev ?? []) as DayEvent[]);
     const names = new Map((custs ?? []).map((c) => [c.id as string, c.name as string]));
@@ -100,17 +102,17 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     const due = ((debts ?? []) as { customer_id: string; owed_kobo: number; next_due: string | null }[])
       .filter((d) => d.next_due && d.next_due <= todayK && Number(d.owed_kobo) > 0)
       .sort((a, b) => Number(b.owed_kobo) - Number(a.owed_kobo));
-    const proposals = (props_ ?? []) as { id: string; customer_id: string; draft_text: string | null; status: string; created_at: string }[];
+    const proposals = (props_ ?? []) as { id: string; customer_id: string; kind: string; draft_text: string | null; status: string; created_at: string }[];
     const itemMap = new Map((items ?? []).map((i) => [i.id as string, i.name as string]));
     let next: Remind | null = null;
     for (const d of due) {
       const name = names.get(d.customer_id) ?? "Someone";
-      const mine = proposals.filter((p) => p.customer_id === d.customer_id);
+      const mine = proposals.filter((p) => p.customer_id === d.customer_id && p.kind === "debt_reminder");
       const pending = mine.find((p) => p.status === "pending");
       const handledToday = mine.some((p) => p.status !== "pending" && keyOf(p.created_at) === todayK);
       if (handledToday) continue;
       const args = { name, owedKobo: Number(d.owed_kobo), dueDate: d.next_due as string, todayKey: todayK };
-      if (pending) { next = { proposalId: pending.id, customerId: d.customer_id, name, phone: phones.get(d.customer_id) ?? null, title: reminderTitle(args), draft: pending.draft_text ?? "" }; break; }
+      if (pending) { next = { kind: "debt_reminder", proposalId: pending.id, customerId: d.customer_id, name, phone: phones.get(d.customer_id) ?? null, title: reminderTitle(args), draft: pending.draft_text ?? "" }; break; }
       if (creating.current) break;
       creating.current = true;
       const c = ((credits ?? []) as { customer_id: string; note: string | null; item_id: string | null }[]).find((x) => x.customer_id === d.customer_id);
@@ -118,8 +120,29 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
       const draft = draftReminder({ ...args, shop: shop.name ?? "", forWhat });
       const { data: row } = await sb.from("proposal").insert({ shop_id: shop.id, kind: "debt_reminder", customer_id: d.customer_id, draft_text: draft }).select("id").single();
       creating.current = false;
-      if (row) next = { proposalId: row.id as string, customerId: d.customer_id, name, phone: phones.get(d.customer_id) ?? null, title: reminderTitle(args), draft };
+      if (row) next = { kind: "debt_reminder", proposalId: row.id as string, customerId: d.customer_id, name, phone: phones.get(d.customer_id) ?? null, title: reminderTitle(args), draft };
       break;
+    }
+
+    // No debt to chase: is a regular overdue a visit? One gentle offer at a time, and never the same person twice in two weeks.
+    if (!next && !creating.current) {
+      const owingSet = new Set(((debts ?? []) as { customer_id: string; owed_kobo: number }[]).filter((d) => Number(d.owed_kobo) > 0).map((d) => d.customer_id));
+      const lapsed = lapsedRegulars((visitsRaw ?? []) as Visit[], new Date(), owingSet);
+      const winProps = proposals.filter((p) => p.kind === "win_back");
+      const pendingWin = winProps.find((p) => p.status === "pending" && lapsed.some((l) => l.customerId === p.customer_id));
+      const pick = pendingWin ? lapsed.find((l) => l.customerId === pendingWin.customer_id) : lapsed.find((l) => !winProps.some((p) => p.customer_id === l.customerId));
+      if (pick) {
+        const name = names.get(pick.customerId) ?? "Someone";
+        const title = winBackTitle(name, pick.daysSince);
+        if (pendingWin) next = { kind: "win_back", proposalId: pendingWin.id, customerId: pick.customerId, name, phone: phones.get(pick.customerId) ?? null, title, draft: pendingWin.draft_text ?? "" };
+        else {
+          creating.current = true;
+          const draft = draftWinBack({ name, shop: shop.name ?? "", item: pick.topItemId ? itemMap.get(pick.topItemId) : null });
+          const { data: row } = await sb.from("proposal").insert({ shop_id: shop.id, kind: "win_back", customer_id: pick.customerId, draft_text: draft }).select("id").single();
+          creating.current = false;
+          if (row) next = { kind: "win_back", proposalId: row.id as string, customerId: pick.customerId, name, phone: phones.get(pick.customerId) ?? null, title, draft };
+        }
+      }
     }
     setRemind(next);
   }, [sb, shop.id, shop.name]);

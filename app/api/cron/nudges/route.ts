@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { decideNudges, lagosNow, type NudgeKind } from "@/lib/nudges";
+import { lapsedRegulars, type Visit } from "@/lib/regulars";
 import { pushReady, sendPush } from "@/lib/webpush";
 
 export const runtime = "nodejs";
@@ -31,24 +32,32 @@ export async function POST(req: Request) {
 
   let sent = 0, shops = 0;
   for (const [shopId, phones] of byShop) {
-    const [{ data: shop }, { data: closed }, { data: recent }, { data: debts }, { data: props }, { data: log }, { data: custs }] = await Promise.all([
+    const [{ data: shop }, { data: closed }, { data: recent }, { data: debts }, { data: props }, { data: log }, { data: custs }, { data: visitsRaw }, { data: winLog }] = await Promise.all([
       sb.from("shop").select("owner_name, usual_close_time").eq("id", shopId).maybeSingle(),
       sb.from("day_close").select("day").eq("shop_id", shopId).eq("day", day).maybeSingle(),
       sb.from("event").select("id").eq("shop_id", shopId).gte("occurred_at", since).limit(1),
       sb.from("debt").select("customer_id, owed_kobo, next_due").eq("shop_id", shopId),
-      sb.from("proposal").select("customer_id, status, created_at").eq("shop_id", shopId).eq("kind", "debt_reminder").gte("created_at", new Date(Date.now() - 36 * 3600 * 1000).toISOString()),
+      sb.from("proposal").select("customer_id, kind, status, created_at").eq("shop_id", shopId).in("kind", ["debt_reminder", "win_back"]).gte("created_at", new Date(Date.now() - 15 * 86_400_000).toISOString()),
       sb.from("nudge_log").select("kind").eq("shop_id", shopId).eq("day", day),
       sb.from("customer").select("id, name").eq("shop_id", shopId),
+      sb.from("event").select("customer_id, occurred_at, item_id").eq("shop_id", shopId).in("kind", ["sale", "credit_sale"]).not("customer_id", "is", null).gte("occurred_at", new Date(Date.now() - 120 * 86_400_000).toISOString()).limit(3000),
+      sb.from("nudge_log").select("day").eq("shop_id", shopId).eq("kind", "winback").gte("day", new Date(Date.now() - 3 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" })),
     ]);
     if (!shop) continue;
     shops++;
 
     const names = new Map((custs ?? []).map((c) => [c.id as string, c.name as string]));
-    const handled = new Set((props ?? []).filter((p) => p.status !== "pending" && new Date(p.created_at).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" }) === day).map((p) => p.customer_id as string));
+    const handled = new Set((props ?? []).filter((p) => p.kind === "debt_reminder" && p.status !== "pending" && new Date(p.created_at).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" }) === day).map((p) => p.customer_id as string));
     const top = (debts ?? []).filter((d) => d.next_due && d.next_due <= day && Number(d.owed_kobo) > 0 && !handled.has(d.customer_id as string))
       .sort((a, b) => Number(b.owed_kobo) - Number(a.owed_kobo))[0];
 
+    const owingSet = new Set((debts ?? []).filter((d) => Number(d.owed_kobo) > 0).map((d) => d.customer_id as string));
+    const askedRecently = new Set((props ?? []).filter((p) => p.kind === "win_back").map((p) => p.customer_id as string));
+    const quiet = lapsedRegulars((visitsRaw ?? []) as Visit[], new Date(), owingSet).find((l) => !askedRecently.has(l.customerId));
+
     const nudges = decideNudges({
+      winback: quiet ? { name: names.get(quiet.customerId) ?? "A regular", days: quiet.daysSince } : null,
+      winbackSentRecently: (winLog ?? []).length > 0,
       nowMin: minutes, closeMin: minutesOf(shop.usual_close_time),
       firstName: (shop.owner_name ?? "").split(/\s+/)[0] || "there",
       closedToday: !!closed, activeRecently: (recent ?? []).length > 0,

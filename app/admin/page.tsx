@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 
 type Report = { id: string; kind: "error" | "feedback"; message: string; context: Record<string, unknown>; user_agent: string | null; created_at: string; shop: string | null };
-type Data = { stats: Record<string, number>; reports: Report[] };
+type Shop = { id: string; shop: string; joined: string; notes: number; activeDays: number; last: string | null; closedDays: number; failed: number; voice: number; saved: boolean; winBacksSent: number; winBacksWorked: number };
+type Data = { stats: Record<string, number>; reports: Report[]; pilot: Shop[] };
+const ago = (iso: string | null) => { if (!iso) return "never"; const h = (Date.now() - new Date(iso).getTime()) / 3.6e6; return h < 1 ? "just now" : h < 24 ? `${Math.round(h)}h ago` : `${Math.round(h / 24)}d ago`; };
 
 const LABELS: [string, string][] = [
   ["shops", "Shops"], ["shopsThisWeek", "New this week"], ["activeLast24h", "Active today"], ["closedLast24h", "Closed a day today"],
@@ -46,6 +48,23 @@ export default function Admin() {
         ))}
       </div>
       <p className="label" style={{ margin: "12px 4px 0" }}>{rate}% of this week's notes couldn't be read.</p>
+
+      <h2 className="head" style={{ fontSize: 22, margin: "32px 0 4px" }}>Owners</h2>
+      <p className="label" style={{ margin: "0 0 8px", fontSize: 15 }}>The question for the pilot: did she record on day 1, and come back on day 2?</p>
+      {data.pilot.length === 0 && <p className="label" style={{ fontSize: 17 }}>No shops yet.</p>}
+      {data.pilot.map((p) => {
+        const back = p.activeDays >= 2;
+        return (
+          <div key={p.id} className="surface" style={{ marginTop: 10, padding: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+              <strong style={{ fontSize: 18 }}>{p.shop}</strong>
+              <span className="pill" style={{ background: back ? "var(--good-fill)" : p.notes ? "var(--care-fill)" : "var(--surface-2)", color: back ? "var(--good-text)" : p.notes ? "var(--care-text)" : "var(--ink-2)" }}>{back ? "Came back" : p.notes ? "Day 1 only" : "No notes"}</span>
+            </div>
+            <p className="label" style={{ margin: "6px 0 0", fontSize: 14 }}>Joined {ago(p.joined)} · last active {ago(p.last)} · {p.saved ? "account saved" : "not saved yet"}</p>
+            <p style={{ margin: "8px 0 0", fontSize: 16 }}>{p.notes} notes on {p.activeDays} {p.activeDays === 1 ? "day" : "days"} · {p.closedDays} days closed · {p.voice} voice · {p.failed} couldn't read{p.winBacksSent ? ` · win-backs: ${p.winBacksSent} sent, ${p.winBacksWorked} came back` : ""}</p>
+          </div>
+        );
+      })}
 
       <div className="seg" role="radiogroup" aria-label="Show" style={{ margin: "24px 0 8px" }}>
         {(["all", "error", "feedback"] as const).map((f) => <button key={f} role="radio" aria-checked={filter === f} onClick={() => setFilter(f)}>{f === "all" ? "All" : f === "error" ? "Errors" : "Feedback"}</button>)}

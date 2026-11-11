@@ -31,6 +31,7 @@ export async function applyActions(ctx: Ctx, actions: Action[]) {
   const lines: string[] = [];
   let changed = false, wrote = 0, missed = 0, historyFailed = false;
   const touchedCustomers: string[] = [];
+  const boughtCustomers: string[] = []; // customers who bought, from new records (for "they came back")
 
   async function resolve(table: "customer" | "item", index: Map<string, string>, names: Map<string, string>, name: string) {
     if (!name) return null;
@@ -61,7 +62,7 @@ export async function applyActions(ctx: Ctx, actions: Action[]) {
       const { error } = await sb.from("event").insert(row);
       if (error) { console.error("add failed", error.message); missed++; continue; }
       wrote++;
-      if (customer_id) touchedCustomers.push(customer_id);
+      if (customer_id) { touchedCustomers.push(customer_id); if (a.kind === "sale" || a.kind === "credit_sale") boughtCustomers.push(customer_id); }
       lines.push(describe({ kind: a.kind, amount_kobo: kobo, customer, item, quantity: row.quantity, note: row.note, due: row.due_date }));
       continue;
     }
@@ -111,5 +112,5 @@ export async function applyActions(ctx: Ctx, actions: Action[]) {
     lines.push(`Updated: ${describeRow(after, custName, itemName)}${was}`);
   }
 
-  return { lines, changed, wrote, missed, touchedCustomers, historyFailed };
+  return { lines, changed, wrote, missed, touchedCustomers, boughtCustomers, historyFailed };
 }

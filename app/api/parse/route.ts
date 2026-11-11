@@ -147,8 +147,20 @@ export async function POST(req: Request) {
   const itemIndex = new Map<string, string>();
   for (const i of items ?? []) [i.name, ...(i.aliases ?? [])].forEach((n: string) => itemIndex.set(norm(n), i.id));
 
-  const { lines, changed, wrote, missed, touchedCustomers, historyFailed } = await applyActions(
+  const { lines, changed, wrote, missed, touchedCustomers, boughtCustomers, historyFailed } = await applyActions(
     { sb, shopId, captureId: capture.id as string, capturedAt: capture.created_at as string, byRef, custName, itemName, custIndex, itemIndex }, parsed.actions ?? []);
+
+  // Did someone she messaged come back? Say so: it shows her that reaching out works.
+  try {
+    if (boughtCustomers.length) {
+      const ids = [...new Set(boughtCustomers)];
+      const { data: wins } = await sb.from("proposal").select("customer_id, decided_at").eq("kind", "win_back").in("status", ["approved", "edited"]).in("customer_id", ids).gte("decided_at", new Date(Date.now() - 21 * 86_400_000).toISOString());
+      for (const w of wins ?? []) {
+        const { count } = await sb.from("event").select("id", { count: "exact", head: true }).eq("customer_id", w.customer_id).in("kind", ["sale", "credit_sale"]).gte("occurred_at", w.decided_at).neq("capture_id", capture.id);
+        if (!count) lines.push(`${custName.get(w.customer_id as string) ?? "They"} is back after your message.`);
+      }
+    }
+  } catch { /* a nice-to-have, never worth failing her note */ }
 
   if (touchedCustomers.length) await sb.from("customer").update({ last_seen_at: new Date().toISOString() }).in("id", [...new Set(touchedCustomers)]);
 
