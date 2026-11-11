@@ -9,6 +9,7 @@ import { supabaseBrowser } from "@/lib/supabase";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { useVoice } from "@/lib/voice";
 import { Closing } from "./Closing";
+import { SaveAccount } from "./SaveAccount";
 
 const greeting = (h: number) => (h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening");
 const CLOSING_FROM_HOUR = 18;
@@ -32,6 +33,9 @@ export function Today({ shop }: { shop: Shop }) {
   const [owing, setOwing] = useState<Owing[]>([]);
   const [itemNames, setItemNames] = useState<Map<string, string>>(new Map());
   const [closes, setCloses] = useState<Close[]>([]);
+  const [anonymous, setAnonymous] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
   const [talkMode, setTalkMode] = useState<"voice" | "text">("text");
   const [now, setNow] = useState(() => new Date());
   const getToken = useCallback(async () => (await sb.auth.getSession()).data.session?.access_token ?? "", [sb]);
@@ -60,6 +64,9 @@ export function Today({ shop }: { shop: Shop }) {
     setCloses((dc ?? []) as Close[]);
   }, [sb]);
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    sb.auth.getUser().then(({ data }) => { setAnonymous(!!data.user?.is_anonymous); setEmail(data.user?.email ?? null); });
+  }, [sb]);
 
   const today = forDay(recent, todayKey);
   const sales = salesOf(today);
@@ -123,6 +130,13 @@ export function Today({ shop }: { shop: Shop }) {
     setClosing(false);
     setReply(null);
     refresh();
+    // She has something worth keeping now. Ask once a day at most.
+    let asked = false;
+    try { asked = localStorage.getItem("spal-save-asked") === todayKey; } catch {}
+    if (anonymous && !asked) {
+      setSaveOpen(true);
+      try { localStorage.setItem("spal-save-asked", todayKey); } catch {}
+    }
   }
 
   async function chooseTheme(m: ThemeMode) {
@@ -253,6 +267,12 @@ export function Today({ shop }: { shop: Shop }) {
       <Sheet open={profile} onClose={() => setProfile(false)} title="Profile">
         <h2 className="head" style={{ fontSize: 26, margin: "0 0 4px" }}>{shop.owner_name}</h2>
         <p className="label" style={{ margin: "0 0 12px" }}>{shop.name}</p>
+        <p className="label" style={{ margin: "16px 0 4px" }}>Account</p>
+        {anonymous ? (
+          <button className="row" onClick={() => { setProfile(false); setSaveOpen(true); }}><span>Save my account</span><Icon name="chevron" size={20} /></button>
+        ) : (
+          <div className="row"><span>{email ?? "Saved"}</span><Icon name="check" size={22} /></div>
+        )}
         <p className="label" style={{ margin: "16px 0 4px" }}>Theme</p>
         {(["light", "dark", "auto"] as ThemeMode[]).map((m) => (
           <button key={m} className="row" onClick={() => chooseTheme(m)}>
@@ -261,6 +281,8 @@ export function Today({ shop }: { shop: Shop }) {
           </button>
         ))}
       </Sheet>
+
+      <SaveAccount open={saveOpen} onClose={() => setSaveOpen(false)} sb={sb} ownerFirst={first} />
 
       {closing && (
         <Closing sb={sb} getToken={getToken} shopId={shop.id} ownerFirst={first} today={today} recent={recent} todayKey={todayKey} itemNames={itemNames} owing={owing} refresh={refresh} onClose={() => setClosing(false)} onClosed={closeDay} />

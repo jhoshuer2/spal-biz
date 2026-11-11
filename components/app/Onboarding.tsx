@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { Button, Orb, TextField } from "@/components/ui";
+import { supabaseBrowser } from "@/lib/supabase";
+import { SaveAccount } from "./SaveAccount";
 
 type Answers = { name: string; sells: string; shop: string };
 
@@ -8,6 +10,7 @@ type Answers = { name: string; sells: string; shop: string };
 export function Onboarding({ onDone, error, busy }: { onDone: (a: Answers) => void; error?: string | null; busy?: boolean }) {
   const [step, setStep] = useState(0);
   const [a, setA] = useState<Answers>({ name: "", sells: "", shop: "" });
+  const [signin, setSignin] = useState(false);
 
   const first = a.name.trim().split(/\s+/)[0];
   const steps = [
@@ -40,7 +43,9 @@ export function Onboarding({ onDone, error, busy }: { onDone: (a: Answers) => vo
       <div style={{ padding: "12px 20px 28px", maxWidth: 560, width: "100%", margin: "0 auto", display: "grid", gap: 8 }}>
         <Button block onClick={next} disabled={!value.trim() || busy}>{busy ? "One moment" : last ? "Let's go" : "Next"}</Button>
         {step > 0 && !busy && <Button kind="ghost" block onClick={() => setStep(step - 1)}>Back</Button>}
+        {step === 0 && !busy && <Button kind="ghost" block onClick={() => setSignin(true)}>I already use Spal</Button>}
       </div>
+      <SaveAccount open={signin} onClose={() => setSignin(false)} sb={supabaseBrowser()} mode="signin" />
     </main>
   );
 }
