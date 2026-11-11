@@ -118,5 +118,12 @@ export function Orb({ state = "idle", tone = "lilac", size = 220, level = 0 }: {
     };
   }, [size, tone]);
 
-  return <canvas ref={ref} width={size} height={size} style={{ width: size, height: size }} role="img" aria-label={`Spal is ${state}`} />;
+  const pal = TONES[tone];
+  return (
+    <div style={{ position: "relative", width: size, height: size }}>
+      {/* Painted by CSS, so it shows in the first paint; the live orb draws over it */}
+      <div aria-hidden="true" style={{ position: "absolute", inset: "7%", borderRadius: "50%", background: `radial-gradient(circle at 34% 28%, #ffffff 0%, ${pal.base} 38%, ${pal.blobs[0]}99 72%, ${pal.blobs[1]}88 100%)` }} />
+      <canvas ref={ref} width={size} height={size} style={{ position: "absolute", inset: 0, width: size, height: size }} role="img" aria-label={`Spal is ${state}`} />
+    </div>
+  );
 }
