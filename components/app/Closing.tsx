@@ -4,10 +4,11 @@ import { Button, DeltaPill, Icon, Orb, Roll, Surface, TextField } from "@/compon
 import { naira } from "@/lib/format";
 import { closingCase, countOf, salesOf, summarize, type DayEvent, type Summary } from "@/lib/day";
 import { sendNote, undoNote, type Reply } from "@/lib/capture";
+import { useVoice } from "@/lib/voice";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Props = {
-  sb: SupabaseClient; shopId: string; ownerFirst: string;
+  sb: SupabaseClient; getToken: () => Promise<string>; shopId: string; ownerFirst: string;
   today: DayEvent[]; recent: DayEvent[]; todayKey: string;
   itemNames: Map<string, string>; owing: { name: string; kobo: number }[];
   refresh: () => Promise<void>;
@@ -15,7 +16,7 @@ type Props = {
 };
 
 /** Spal speaks first, fits the question to the day she had, then gives the summary. */
-export function Closing({ sb, shopId, ownerFirst, today, recent, todayKey, itemNames, owing, refresh, onClose, onClosed }: Props) {
+export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, todayKey, itemNames, owing, refresh, onClose, onClosed }: Props) {
   const [step, setStep] = useState<"ask" | "summary">("ask");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,6 +28,8 @@ export function Closing({ sb, shopId, ownerFirst, today, recent, todayKey, itemN
   const [ready, setReady] = useState(false);
   useEffect(() => { refresh().finally(() => setReady(true)); }, [refresh]);
 
+  const voice = useVoice(getToken);
+
   const kind = closingCase(today, recent, todayKey);
   const n = countOf(today);
   const total = salesOf(today);
@@ -37,13 +40,28 @@ export function Closing({ sb, shopId, ownerFirst, today, recent, todayKey, itemN
     : `${n} ${n === 1 ? "sale" : "sales"}, ${naira(total)}. Does that sound right?`;
   const sub = kind === "nothing" ? "Tell me what you sold, what you spent, or who owes you." : null;
 
-  async function submit() {
-    const t = note.trim();
+  async function onMic() {
+    setErr(null);
+    if (voice.state === "recording") {
+      setBusy(true);
+      const r = await voice.finish();
+      setBusy(false);
+      if ("error" in r) { setErr(r.error === "empty" ? "I didn't hear anything. Try again." : "I couldn't hear that. You can type it instead."); return; }
+      await submit(r.text, r.blob);
+      return;
+    }
+    if (voice.state !== "idle") return;
+    const r = await voice.start();
+    if (r !== "ok") setErr("I can't use the microphone. You can type instead.");
+  }
+
+  async function submit(text?: string, voiceBlob?: Blob) {
+    const t = (text ?? note).trim();
     if (!t || busy) return;
     setBusy(true);
     setErr(null);
     const ctx = question ? `${question.note} | Spal asked: ${question.question}` : undefined;
-    const { reply, keepFailed } = await sendNote(sb, shopId, t, ctx);
+    const { reply, keepFailed } = await sendNote(sb, shopId, t, ctx, voiceBlob ? { blob: voiceBlob } : undefined);
     setBusy(false);
     if (keepFailed || !reply) { setErr("I couldn't keep that. Please try again."); return; }
     setNote("");
@@ -80,6 +98,7 @@ export function Closing({ sb, shopId, ownerFirst, today, recent, todayKey, itemN
             {added.map((r) => (
               <Surface key={r.captureId} className="" >
                 <p className="label" style={{ margin: 0 }}>Got it</p>
+                {r.heard && <p className="label" style={{ margin: "4px 0 0", fontStyle: "italic" }}>I heard: “{r.heard}”</p>}
                 {r.lines.map((l, i) => <p key={i} style={{ margin: "6px 0 0", fontSize: 18, fontWeight: 500 }}>{l}</p>)}
                 <div style={{ marginTop: 8 }}><Button kind="ghost" small onClick={() => undo(r)} style={{ color: "var(--ink-2)" }}>Not right? Undo</Button></div>
               </Surface>
@@ -87,13 +106,14 @@ export function Closing({ sb, shopId, ownerFirst, today, recent, todayKey, itemN
             {question && <Surface><p style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>{question.question}</p></Surface>}
 
             <div style={{ marginTop: 16 }}>
-              <TextField value={note} onChange={setNote} onSubmit={submit} placeholder={question ? "Type your answer" : kind === "nothing" && !added.length ? "Sold rice, ₦4,500, spent 3k on fuel" : "Add something I missed"} />
+              <TextField value={note} onChange={setNote} onSubmit={() => submit()} onMic={voice.supported ? onMic : undefined} micActive={voice.state === "recording"} placeholder={question ? "Type your answer" : kind === "nothing" && !added.length ? "Sold rice, ₦4,500, spent 3k on fuel" : "Add something I missed"} />
+              {voice.state === "recording" && <p className="label" style={{ margin: "10px 4px 0" }}>Listening. Tap the mic when you're done.</p>}
               {err && <p role="alert" style={{ margin: "10px 4px 0", color: "#ffb38a" }}>{err}</p>}
             </div>
             <div style={{ flex: 1 }} />
             <div style={{ display: "grid", gap: 8, marginTop: 24 }}>
               {note.trim() ? (
-                <Button block onClick={submit} disabled={busy}>{busy ? "One moment" : "Add it"}</Button>
+                <Button block onClick={() => submit()} disabled={busy}>{busy ? "One moment" : "Add it"}</Button>
               ) : (
                 <Button block onClick={() => setStep("summary")}>
                   {kind === "everything" || added.length > 0 ? "Yes, that's everything" : kind === "some" ? "That's everything" : "Nothing today"}

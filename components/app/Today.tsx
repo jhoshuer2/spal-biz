@@ -1,12 +1,13 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { Button, DeltaPill, Icon, ListRow, Orb, Roll, Sheet, Surface, TabBar, TextField, type Place } from "@/components/ui";
+import { Button, DeltaPill, Icon, ListRow, Orb, Roll, Sheet, Surface, TabBar, TalkButton, TextField, type Place } from "@/components/ui";
 import { sendNote, undoNote, type Reply } from "@/lib/capture";
 import { dayKey, forDay, salesOf, spentOf, type DayEvent, type Summary } from "@/lib/day";
 import { naira } from "@/lib/format";
 import type { Shop } from "@/lib/supabase";
 import { supabaseBrowser } from "@/lib/supabase";
 import { useTheme, type ThemeMode } from "@/lib/theme";
+import { useVoice } from "@/lib/voice";
 import { Closing } from "./Closing";
 
 const greeting = (h: number) => (h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening");
@@ -31,7 +32,10 @@ export function Today({ shop }: { shop: Shop }) {
   const [owing, setOwing] = useState<Owing[]>([]);
   const [itemNames, setItemNames] = useState<Map<string, string>>(new Map());
   const [closes, setCloses] = useState<Close[]>([]);
+  const [talkMode, setTalkMode] = useState<"voice" | "text">("text");
   const [now, setNow] = useState(() => new Date());
+  const getToken = useCallback(async () => (await sb.auth.getSession()).data.session?.access_token ?? "", [sb]);
+  const voice = useVoice(getToken);
   useEffect(() => setNow(new Date()), []);
 
   const hour = now.getHours();
@@ -66,16 +70,43 @@ export function Today({ shop }: { shop: Shop }) {
   const evening = hour >= CLOSING_FROM_HOUR;
   const mood = evening ? "evening" : "normal";
 
-  async function send(text: string, context?: string) {
+  async function send(text: string, context?: string, voiceBlob?: Blob) {
     const t = text.trim();
     if (!t || busy) return;
     setBusy(true);
     setErr(null);
-    const { reply: r, keepFailed } = await sendNote(sb, shop.id, t, context);
+    const { reply: r, keepFailed } = await sendNote(sb, shop.id, t, context, voiceBlob ? { blob: voiceBlob } : undefined);
     setBusy(false);
     if (keepFailed || !r) { setErr("I couldn't keep that. Please try again."); return; }
     setNote(""); setAnswer(""); setTalk(false); setReply(r);
     refresh();
+  }
+
+  /** The big button: start listening, or stop and send what she said. */
+  async function onTalk() {
+    if (voice.state === "recording") return stopAndSend();
+    if (voice.state === "transcribing" || busy) return;
+    setErr(null);
+    setTalk(true);
+    if (!voice.supported) { setTalkMode("text"); return; }
+    const r = await voice.start();
+    if (r === "ok") setTalkMode("voice");
+    else { setTalkMode("text"); setErr("I can't use the microphone. You can type instead."); }
+  }
+
+  async function stopAndSend() {
+    const r = await voice.finish();
+    if ("error" in r) {
+      setErr(r.error === "empty" ? "I didn't hear anything. Tap the button and try again." : "I couldn't hear that. You can type it instead.");
+      setTalkMode("text");
+      return;
+    }
+    await send(r.text, undefined, r.blob);
+  }
+
+  function closeTalk() {
+    voice.cancel();
+    setTalk(false);
   }
 
   async function undo() {
@@ -83,6 +114,7 @@ export function Today({ shop }: { shop: Shop }) {
     await undoNote(sb, reply.captureId);
     setReply(null);
     setTalk(true);
+    setTalkMode("text");
     refresh();
   }
 
@@ -152,6 +184,7 @@ export function Today({ shop }: { shop: Shop }) {
                 ) : (
                   <>
                     <p className="label" style={{ margin: 0 }}>Got it</p>
+                    {reply.heard && <p className="label" style={{ margin: "4px 0 0", fontStyle: "italic" }}>I heard: “{reply.heard}”</p>}
                     <div style={{ marginTop: 8, display: "grid", gap: 6 }}>{reply.lines.map((l, i) => <p key={i} style={bigLine}>{l}</p>)}</div>
                     {reply.question && <p className="label" style={{ margin: "12px 0 0", fontSize: 16 }}>{reply.question}</p>}
                     <div style={{ marginTop: 12 }}><Button kind="ghost" small onClick={undo}>Not right? Undo</Button></div>
@@ -195,14 +228,26 @@ export function Today({ shop }: { shop: Shop }) {
       </div>
 
       <div style={{ position: "fixed", left: 0, right: 0, bottom: 16, padding: "0 24px", maxWidth: 560, margin: "0 auto", zIndex: 20 }}>
-        <TabBar place={place} onPlace={setPlace} onTalk={() => setTalk(true)} />
+        <TabBar place={place} onPlace={setPlace} listening={voice.state === "recording"} level={voice.level} onTalk={onTalk} />
       </div>
 
-      <Sheet open={talk} onClose={() => setTalk(false)} title="Tell Spal">
-        <h2 className="head" style={{ fontSize: 26, margin: "0 0 16px" }}>What happened?</h2>
-        <TextField value={note} onChange={setNote} onSubmit={() => send(note)} placeholder="Sold two tins of milk, ₦4,500" autoFocus />
-        {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
-        <div style={{ marginTop: 16 }}><Button block onClick={() => send(note)} disabled={!note.trim() || busy}>{busy ? "One moment" : "Tell Spal"}</Button></div>
+      <Sheet open={talk} onClose={closeTalk} title="Tell Spal">
+        {talkMode === "voice" ? (
+          <div style={{ display: "grid", justifyItems: "center", gap: 8, padding: "4px 0 8px" }}>
+            <Orb tone="lilac" size={120} state={voice.state === "recording" ? "listening" : "thinking"} level={voice.level} />
+            <p className="label" style={{ margin: "4px 0 0", fontSize: 18 }}>{voice.state === "recording" ? "Listening. Tap when you're done." : "One moment"}</p>
+            <TalkButton listening={voice.state === "recording"} level={voice.level} onClick={stopAndSend} />
+            <Button kind="ghost" small onClick={() => { voice.cancel(); setTalkMode("text"); }}>Type instead</Button>
+          </div>
+        ) : (
+          <>
+            <h2 className="head" style={{ fontSize: 26, margin: "0 0 16px" }}>What happened?</h2>
+            <TextField value={note} onChange={setNote} onSubmit={() => send(note)} placeholder="Sold two tins of milk, ₦4,500" autoFocus
+              onMic={voice.supported ? async () => { setErr(null); const r = await voice.start(); if (r === "ok") setTalkMode("voice"); else setErr("I can't use the microphone. You can type instead."); } : undefined} />
+            {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
+            <div style={{ marginTop: 16 }}><Button block onClick={() => send(note)} disabled={!note.trim() || busy}>{busy ? "One moment" : "Tell Spal"}</Button></div>
+          </>
+        )}
       </Sheet>
 
       <Sheet open={profile} onClose={() => setProfile(false)} title="Profile">
@@ -218,7 +263,7 @@ export function Today({ shop }: { shop: Shop }) {
       </Sheet>
 
       {closing && (
-        <Closing sb={sb} shopId={shop.id} ownerFirst={first} today={today} recent={recent} todayKey={todayKey} itemNames={itemNames} owing={owing} refresh={refresh} onClose={() => setClosing(false)} onClosed={closeDay} />
+        <Closing sb={sb} getToken={getToken} shopId={shop.id} ownerFirst={first} today={today} recent={recent} todayKey={todayKey} itemNames={itemNames} owing={owing} refresh={refresh} onClose={() => setClosing(false)} onClosed={closeDay} />
       )}
     </main>
   );

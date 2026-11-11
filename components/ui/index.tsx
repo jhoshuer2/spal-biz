@@ -45,7 +45,7 @@ export function ListRow({ label, value, chevron = true, onClick }: { label: stri
   );
 }
 
-export function TextField({ label, placeholder, value, onChange, onSubmit, onMic, autoFocus, name }: { label?: string; placeholder?: string; value?: string; onChange?: (v: string) => void; onSubmit?: () => void; onMic?: () => void; autoFocus?: boolean; name?: string }) {
+export function TextField({ label, placeholder, value, onChange, onSubmit, onMic, autoFocus, name, micActive }: { label?: string; placeholder?: string; value?: string; onChange?: (v: string) => void; onSubmit?: () => void; onMic?: () => void; micActive?: boolean; autoFocus?: boolean; name?: string }) {
   const id = useId();
   return (
     <div className="field">
@@ -54,7 +54,7 @@ export function TextField({ label, placeholder, value, onChange, onSubmit, onMic
         <input id={id} name={name} placeholder={placeholder} value={value} autoFocus={autoFocus} autoComplete="off" enterKeyHint="done"
           onChange={onChange ? (e) => onChange(e.target.value) : undefined}
           onKeyDown={onSubmit ? (e) => { if (e.key === "Enter") onSubmit(); } : undefined} />
-        {onMic && <button className="mic" aria-label="Speak instead" onClick={onMic}><Icon name="mic" size={22} /></button>}
+        {onMic && <button className="mic" data-active={!!micActive} aria-label={micActive ? "Stop and send" : "Speak instead"} aria-pressed={!!micActive} onClick={onMic}><Icon name="mic" size={22} /></button>}
       </div>
     </div>
   );

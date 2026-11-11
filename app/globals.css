@@ -203,6 +203,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .input-wrap input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--ink); height: 56px; outline: none; }
 .input-wrap:focus-within { box-shadow: 0 0 0 3px var(--ink); }
 .input-wrap input::placeholder { color: var(--ink-3); }
+.input-wrap .mic[data-active="true"] { background: var(--action); color: var(--on-action); }
 .input-wrap .mic { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--surface); color: var(--ink); display: grid; place-items: center; }
 
 /* ============ Talk button ============ */
