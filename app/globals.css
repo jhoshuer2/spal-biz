@@ -7,8 +7,8 @@
    Components use these variables only, never raw colours. */
 
 :root {
-  --font-text: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-head: "Playfair Display Variable", "Inter Variable", Georgia, serif;
+  --font-text: "Source Sans 3 Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-head: "Inter Tight Variable", "Helvetica Neue", Helvetica, Arial, sans-serif;
 
   --bg: #f4f6fa;
   --surface: #ffffff;
@@ -129,7 +129,7 @@ body {
   color: var(--ink);
   font-family: var(--font-text);
   font-weight: 400;
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
@@ -137,7 +137,7 @@ body {
 button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
 
-.head { font-family: var(--font-head); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
+.head { font-family: var(--font-head); font-weight: 700; letter-spacing: -0.035em; line-height: 1.02; }
 .num { font-weight: 300; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
 .label { font-size: 14px; color: var(--ink-2); }
 .muted { color: var(--ink-3); }

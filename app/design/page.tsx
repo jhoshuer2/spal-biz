@@ -134,7 +134,7 @@ export default function DesignPage() {
           <div className="num" style={{ fontSize: "min(88px, 11vw)", marginTop: 20 }}>₦1,284,500</div>
           <p style={{ fontSize: 16, margin: "20px 0 0" }}>Blessing is due to pay ₦12,000 today. Should I send her a reminder?</p>
           <p className="label" style={{ margin: "12px 0 0" }}>Ẹ kú àárọ̀ · Ọjọ́ òní · Ṣé ó dára? · Ị mere ọ́ma · Ụlọ ahịa</p>
-          <p className="muted" style={{ fontSize: 13, margin: "12px 0 0" }}>Headlines: Playfair Display ExtraBold. Text and numerals: Inter, light for big numbers. Money is always Inter. Playfair has no ₦ or ṣ, so those fall back to Inter.</p>
+          <p className="muted" style={{ fontSize: 13, margin: "12px 0 0" }}>Headlines: Neue Haas Grotesk Display (shown here with Inter Tight until the licensed files arrive). Text and numerals: Source Sans 3, light for big numbers. Both stand-ins cover ₦ and the Yoruba and Igbo marks.</p>
         </Surface>
       </Section>
 

@@ -1,5 +1,5 @@
-import "@fontsource-variable/inter";
-import "@fontsource-variable/playfair-display";
+import "@fontsource-variable/inter-tight"; // headline stand-in for Neue Haas Grotesk Display
+import "@fontsource-variable/source-sans-3"; // body
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "@/lib/theme";

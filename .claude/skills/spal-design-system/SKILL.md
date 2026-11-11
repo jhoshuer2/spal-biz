@@ -89,13 +89,13 @@ Three settings: **Light, Dark, Auto**. Changed in **Profile**. Default Auto.
 
 ### Type
 
-- **Headlines: Playfair Display ExtraBold (800)**, chosen by Joshua. Used only for headline moments (the greeting, a screen title, a big statement). Never for body, UI labels, or numbers.
-- **Text and numerals: Inter**, light (300) for big numerals, regular for text. Inter covers `₦` and all Yoruba/Igbo marks.
-- **Playfair has no `₦`, `ṣ` or `Ṣ`.** So money is never set in Playfair (always Inter), and the headline stack falls back to Inter per glyph (`"Playfair Display Variable", "Inter Variable", Georgia, serif`). A Yoruba headline with `ṣ` will show that one letter in Inter; check those headlines by eye before launch in Yoruba.
-- Any new font must be checked for `₦` and the Yoruba/Igbo marks (ẹ ọ ṣ ị ụ ń and combining tone marks) before it is added.
+- **Headlines: Neue Haas Grotesk Display**, chosen by Joshua (replaces Playfair Display, 2026-11-11). Bold, tight tracking (-0.035em), only for headline moments (greeting, screen title, a big statement). Never for body, UI labels, or numbers.
+- **Licensing:** Neue Haas Grotesk is a paid Monotype font. Until licensed `.woff2` files are added at `public/fonts/`, **Inter Tight is the stand-in** (closest free neo-grotesque). When the files arrive: add `@font-face`, put `"Neue Haas Grotesk Display"` first in `--font-head`, and verify the real files for `₦` and the Yoruba/Igbo marks before shipping. Never load it from a third-party CDN without a licence.
+- **Text and numerals: Source Sans 3** (humanist, complements the neo-grotesque headline, stays legible at small sizes on cheap screens). Light (300) for big numerals, regular for text. Covers `₦` and all Yoruba/Igbo marks.
+- Any new font must be checked for `₦` and the Yoruba/Igbo marks (ẹ ọ ṣ ị ụ ń and combining tone marks) before it is added. Checked and fine: Inter Tight, Source Sans 3, Inter, Public Sans, Work Sans. Not fine: Playfair, Geist, Bricolage, DM Sans, Instrument Sans, Manrope.
 - Self-hosted through `@fontsource-variable/*` packages (unicode-range subsets, so phones download only what a screen uses). No runtime requests to Google Fonts.
 - Numerals: `font-variant-numeric: tabular-nums`. Money always uses a thin space between `₦` and digits only if the font renders it cleanly; otherwise no space. Pick one and use everywhere.
-- Scale (px, mobile): 12 / 14 / 16 / 20 / 28 / 40 / 64 / 88 (hero numeral). Body never under 16.
+- Scale (px, mobile): 12 / 14 / 16 / 20 / 28 / 40 / 64 / 88 (hero numeral). Body 17 by default, never under 16.
 - Max one headline and one hero number per screen.
 
 ### Space, shape, depth
