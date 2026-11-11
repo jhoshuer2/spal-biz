@@ -45,15 +45,16 @@ export function ListRow({ label, value, chevron = true, onClick }: { label: stri
   );
 }
 
-export function TextField({ label, placeholder, value, onChange, onSubmit, onMic, autoFocus, name, micActive }: { label?: string; placeholder?: string; value?: string; onChange?: (v: string) => void; onSubmit?: () => void; onMic?: () => void; micActive?: boolean; autoFocus?: boolean; name?: string }) {
+export function TextField({ label, placeholder, value, onChange, onSubmit, onMic, autoFocus, name, micActive, type, autoComplete, trailing }: { type?: string; autoComplete?: string; trailing?: React.ReactNode; label?: string; placeholder?: string; value?: string; onChange?: (v: string) => void; onSubmit?: () => void; onMic?: () => void; micActive?: boolean; autoFocus?: boolean; name?: string }) {
   const id = useId();
   return (
     <div className="field">
       {label && <label htmlFor={id} className="label">{label}</label>}
       <div className="input-wrap">
-        <input id={id} name={name} placeholder={placeholder} value={value} autoFocus={autoFocus} autoComplete="off" enterKeyHint="done"
+        <input id={id} name={name} type={type} placeholder={placeholder} value={value} autoFocus={autoFocus} autoComplete={autoComplete ?? "off"} enterKeyHint="done"
           onChange={onChange ? (e) => onChange(e.target.value) : undefined}
           onKeyDown={onSubmit ? (e) => { if (e.key === "Enter") onSubmit(); } : undefined} />
+        {trailing}
         {onMic && <button className="mic" data-active={!!micActive} aria-label={micActive ? "Stop and send" : "Speak instead"} aria-pressed={!!micActive} onClick={onMic}><Icon name="mic" size={22} /></button>}
       </div>
     </div>

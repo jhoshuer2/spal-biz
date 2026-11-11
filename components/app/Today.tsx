@@ -13,6 +13,7 @@ import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
 import { SaveAccount } from "./SaveAccount";
+import { SetPassword } from "./SetPassword";
 import { DaySheet } from "./DaySheet";
 import { ProfileReminders, ReminderPrompt, useReminders } from "./Reminders";
 
@@ -51,6 +52,7 @@ export function Today({ shop }: { shop: Shop }) {
   const [anonymous, setAnonymous] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
   const [talkMode, setTalkMode] = useState<"voice" | "text">("text");
   const [now, setNow] = useState(() => new Date());
   const getToken = useCallback(async () => (await sb.auth.getSession()).data.session?.access_token ?? "", [sb]);
@@ -407,7 +409,10 @@ export function Today({ shop }: { shop: Shop }) {
         {anonymous ? (
           <button className="row" onClick={() => { setProfile(false); setSaveOpen(true); }}><span>Save my account</span><Icon name="chevron" size={20} /></button>
         ) : (
-          <div className="row"><span>{email ?? "Saved"}</span><Icon name="check" size={22} /></div>
+          <>
+            <div className="row"><span>{email ?? "Saved"}</span><Icon name="check" size={22} /></div>
+            <button className="row" onClick={() => { setProfile(false); setPwOpen(true); }}><span>Password</span><span className="value">Set or change <Icon name="chevron" size={20} /></span></button>
+          </>
         )}
         <p className="label" style={{ margin: "16px 0 4px" }}>Theme</p>
         {(["light", "dark", "auto"] as ThemeMode[]).map((m) => (
@@ -419,6 +424,8 @@ export function Today({ shop }: { shop: Shop }) {
       </Sheet>
 
       <DaySheet open={detail !== null} onClose={() => setDetail(null)} sb={sb} shopId={shop.id} onChanged={refresh} startKey={detail ?? todayKey} todayKey={todayKey} custNames={custNames} itemNames={itemNames} />
+
+      <SetPassword open={pwOpen} onClose={() => setPwOpen(false)} sb={sb} email={email} />
 
       <SaveAccount open={saveOpen} onClose={() => setSaveOpen(false)} sb={sb} ownerFirst={first} />
 

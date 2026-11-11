@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const GOOGLE = process.env.NEXT_PUBLIC_GOOGLE_SIGNIN === "1";
 
-type Step = "choose" | "email" | "sent";
+type Step = "choose" | "email" | "password" | "sent";
 
 /**
  * Asked once she has something worth keeping. Her private account becomes a real one in place,
@@ -16,6 +16,8 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
   const [step, setStep] = useState<Step>(mode === "signin" ? "email" : "choose");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [pw, setPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -42,6 +44,17 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
       return;
     }
     setStep("sent");
+  }
+
+  async function signInWithPassword() {
+    if (!valid || !pw || busy) return;
+    setBusy(true);
+    setErr(null);
+    const captchaToken = await getCaptchaToken().catch(() => undefined);
+    const { error } = await sb.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: pw, options: captchaToken ? { captchaToken } : undefined });
+    setBusy(false);
+    if (error) { setErr("That email or password didn't work. You can ask for a link instead."); return; }
+    window.location.reload();
   }
 
   async function verify() {
@@ -82,8 +95,30 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
           <TextField value={email} onChange={setEmail} onSubmit={sendEmail} placeholder="amaka@example.com" autoFocus />
           {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
           <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
-            <Button block onClick={sendEmail} disabled={!valid || busy}>{busy ? "One moment" : "Send me a link"}</Button>
+            {mode === "signin" ? (
+              <>
+                <Button block onClick={() => { setErr(null); setStep("password"); }} disabled={!valid}>Use my password</Button>
+                <Button kind="secondary" block onClick={sendEmail} disabled={!valid || busy}>{busy ? "One moment" : "Email me a link instead"}</Button>
+              </>
+            ) : (
+              <Button block onClick={sendEmail} disabled={!valid || busy}>{busy ? "One moment" : "Send me a link"}</Button>
+            )}
             {mode === "save" && <Button kind="ghost" block onClick={() => setStep("choose")}>Back</Button>}
+          </div>
+        </>
+      )}
+
+      {step === "password" && (
+        <>
+          <h2 className="head" style={{ fontSize: 28, margin: "0 0 4px" }}>Your password</h2>
+          <p className="label" style={{ margin: "0 0 16px", fontSize: 17 }}>{email.trim()}</p>
+          <TextField type={showPw ? "text" : "password"} autoComplete="current-password" value={pw} onChange={setPw} onSubmit={signInWithPassword} placeholder="Password" autoFocus
+            trailing={<button className="chip" style={{ minHeight: 36 }} onClick={() => setShowPw((v) => !v)} aria-label={showPw ? "Hide password" : "Show password"}>{showPw ? "Hide" : "Show"}</button>} />
+          {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
+          <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
+            <Button block onClick={signInWithPassword} disabled={!pw || busy}>{busy ? "One moment" : "Sign in"}</Button>
+            <Button kind="secondary" block onClick={sendEmail} disabled={busy}>Email me a link instead</Button>
+            <Button kind="ghost" block onClick={() => { setErr(null); setStep("email"); }}>Back</Button>
           </div>
         </>
       )}

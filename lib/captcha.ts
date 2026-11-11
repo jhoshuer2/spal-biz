@@ -20,8 +20,7 @@ function load() {
   return loading;
 }
 
-/** A one-use token proving a person is there. Usually invisible; shows a small check only if it needs to. */
-export async function getCaptchaToken(): Promise<string | undefined> {
+async function fetchToken(): Promise<string | undefined> {
   if (!KEY) return undefined;
   await load();
   return new Promise((resolve, reject) => {
@@ -38,4 +37,25 @@ export async function getCaptchaToken(): Promise<string | undefined> {
       "error-callback": () => { clearTimeout(t); done(); reject(new Error("captcha error")); },
     });
   });
+}
+
+let warm: { p: Promise<string | undefined>; at: number } | null = null;
+
+/** Start the check in the background, so by the time she taps a button the token is ready. */
+export function warmCaptcha() {
+  if (!KEY || warm) return;
+  warm = { p: fetchToken().catch(() => undefined), at: Date.now() };
+}
+
+/** A one-use token proving a person is there. Uses the one prepared earlier if it is still fresh (they last about 5 minutes). */
+export async function getCaptchaToken(): Promise<string | undefined> {
+  if (!KEY) return undefined;
+  if (warm && Date.now() - warm.at < 4 * 60 * 1000) {
+    const w = warm;
+    warm = null;
+    const t = await w.p;
+    if (t) return t;
+  }
+  warm = null;
+  return fetchToken();
 }
