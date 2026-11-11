@@ -51,7 +51,7 @@ Rules:
 - sale: money received now for goods. If she gives one total for several items, return ONE sale event with that total, no item, and list the items in note (for example "2 milk, 1 sugar"). If she gives a separate price for each item, return one event per item.
 - credit_sale: someone took goods and will pay later ("on credit", "she go pay Friday", "owes me"). Set due_date (YYYY-MM-DD) only if she names a day or date, resolved against today's date given below; otherwise null.
 - payment_received: a customer pays money they owed from before.
-- expense: money she spent.
+- expense: money she spent. Put what it was for in note as a short noun phrase ("fuel", "transport", "stock from the market"), never a sentence and never the verb she used.
 - day_total: she gives only an overall figure for the day ("I made about 40k today").
 - stock_note: a fact about stock with no money ("milk is running low", "restocked rice").
 - Never do arithmetic. Use amount_naira exactly as she said it. If she gives only a unit price and a quantity, fill unit_price_naira and quantity and leave amount_naira null.
