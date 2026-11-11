@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { Button, Icon, Sheet, TextField } from "@/components/ui";
+import { EditEntry } from "./EditEntry";
 import { dayKey, salesOf, spentOf, type DayEvent } from "@/lib/day";
 import { naira } from "@/lib/format";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -16,12 +17,14 @@ const short = (k: string) => new Intl.DateTimeFormat("en-GB", { weekday: "short"
 const dayName = (k: string, today: string) => (k === today ? "Today" : k === shift(today, -1) ? "Yesterday" : short(k));
 
 /** Everything behind the number. Opens from a tap on "Today so far", and she can step back through days. */
-export function DaySheet({ open, onClose, sb, startKey, todayKey, custNames, itemNames }: {
-  open: boolean; onClose: () => void; sb: SupabaseClient; startKey: string; todayKey: string;
-  custNames: Map<string, string>; itemNames: Map<string, string>;
+export function DaySheet({ open, onClose, sb, shopId, startKey, todayKey, custNames, itemNames, onChanged }: {
+  open: boolean; onClose: () => void; sb: SupabaseClient; shopId: string; startKey: string; todayKey: string;
+  custNames: Map<string, string>; itemNames: Map<string, string>; onChanged: () => void;
 }) {
   const [key, setKey] = useState(startKey);
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [edit, setEdit] = useState<Row | null>(null);
+  const [version, setVersion] = useState(0);
   useEffect(() => { if (open) setKey(startKey); }, [open, startKey]);
 
   useEffect(() => {
@@ -33,7 +36,7 @@ export function DaySheet({ open, onClose, sb, startKey, todayKey, custNames, ite
       .order("occurred_at", { ascending: false }).limit(2000)
       .then(({ data }) => { if (live) setRows((data ?? []) as Row[]); });
     return () => { live = false; };
-  }, [open, key, sb]);
+  }, [open, key, sb, version]);
 
   const nav = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -46,8 +49,9 @@ export function DaySheet({ open, onClose, sb, startKey, todayKey, custNames, ite
   return (
     <Sheet open={open} onClose={onClose} title="Day details">
       {rows === null ? (<>{nav}<p className="label" style={{ textAlign: "center", margin: "32px 0" }}>One moment</p></>) : (
-        <DayDetail key={key} header={nav} rows={rows} custNames={custNames} itemNames={itemNames} />
+        <DayDetail key={key} header={nav} rows={rows} custNames={custNames} itemNames={itemNames} onPick={setEdit} />
       )}
+      <EditEntry row={edit} sb={sb} shopId={shopId} custNames={custNames} itemNames={itemNames} onClose={() => setEdit(null)} onChanged={() => { setVersion((v) => v + 1); onChanged(); }} />
     </Sheet>
   );
 }
@@ -56,7 +60,7 @@ export function DaySheet({ open, onClose, sb, startKey, todayKey, custNames, ite
  * The day as two clear halves, Sold and Spent, that stay on screen while she scrolls.
  * Built for a busy shop: search, a "By item" total, and pages of 80 instead of everything at once.
  */
-export function DayDetail({ header, rows, custNames, itemNames }: { header?: React.ReactNode; rows: Row[]; custNames: Map<string, string>; itemNames: Map<string, string> }) {
+export function DayDetail({ header, rows, custNames, itemNames, onPick }: { header?: React.ReactNode; rows: Row[]; custNames: Map<string, string>; itemNames: Map<string, string>; onPick?: (r: Row) => void }) {
   const sold = useMemo(() => rows.filter((r) => r.kind === "sale" || r.kind === "credit_sale"), [rows]);
   const spent = useMemo(() => rows.filter((r) => r.kind === "expense"), [rows]);
   const paid = useMemo(() => rows.filter((r) => r.kind === "payment_received"), [rows]);
@@ -133,6 +137,7 @@ export function DayDetail({ header, rows, custNames, itemNames }: { header?: Rea
         <span className="label" style={{ fontSize: 14 }}>{filtered.length}{needle ? ` of ${list.length}` : ""} {list.length === 1 ? "entry" : "entries"}{total != null ? ` · ${naira(total)}` : ""}</span>
       </div>
 
+      {onPick && filtered.length > 0 && by === "order" && <p className="label" style={{ margin: "0 0 4px", fontSize: 14 }}>Tap an entry to fix or remove it.</p>}
       {list.length > 12 && (
         <div style={{ margin: "8px 0" }}><TextField value={q} onChange={(v) => { setQ(v); setShown(PAGE); }} placeholder="Search by item or name" /></div>
       )}
@@ -158,13 +163,13 @@ export function DayDetail({ header, rows, custNames, itemNames }: { header?: Rea
       ) : (
         <>
           {filtered.slice(0, shown).map((r) => (
-            <div key={r.id} className="row" style={{ minHeight: 64, alignItems: "center" }}>
+            <button key={r.id} className="row" style={{ minHeight: 64, alignItems: "center" }} onClick={() => onPick?.(r)} aria-label={`Edit ${title(r)}`}>
               <span style={{ minWidth: 0 }}>
                 <span style={{ display: "block", fontWeight: 500 }}>{title(r)}</span>
                 <span className="label" style={{ display: "block", fontSize: 14 }}>{sub(r)}</span>
               </span>
               {r.amount_kobo != null && <span style={{ fontWeight: 600, whiteSpace: "nowrap", color: r.kind === "credit_sale" ? "var(--care-text)" : r.kind === "expense" ? "var(--ink-2)" : "var(--ink)" }}>{naira(r.amount_kobo)}</span>}
-            </div>
+            </button>
           ))}
           {filtered.length > shown && (
             <div style={{ marginTop: 12 }}><Button kind="secondary" block onClick={() => setShown(shown + PAGE)}>Show {Math.min(PAGE, filtered.length - shown)} more</Button></div>

@@ -4,6 +4,8 @@ import { useTheme, type ThemeMode } from "@/lib/theme";
 import { Button, Chip, DeltaPill, Icon, ListRow, Orb, ProposalCard, Roll, Segmented, Sheet, Surface, TabBar, TalkButton, TextField, Toggle, type Place } from "@/components/ui";
 import type { OrbState, OrbTone } from "@/components/ui/Orb";
 import { DayDetail, type Row } from "@/components/app/DaySheet";
+import { EditEntry } from "@/components/app/EditEntry";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Mood = "strong" | "normal" | "slow" | "evening";
 type Range = "day" | "week" | "month";
@@ -38,6 +40,8 @@ const BUSY: Row[] = [
 const SAMPLE_CUST = new Map([["chidi", "Mama Chidi"], ["blessing", "Blessing"], ["emeka", "Emeka"]]);
 const SAMPLE_ITEMS = new Map([["rice", "bag of rice"], ["milk", "tin of milk"], ["bread", "bread"], ["sugar", "sugar"], ["oil", "palm oil"]]);
 
+const STUB = {} as SupabaseClient; // the edit form only touches the database when saved
+
 function useLevel(active: boolean) {
   const [level, setLevel] = useState(0);
   useEffect(() => {
@@ -67,6 +71,7 @@ export default function DesignPage() {
   const [sheet, setSheet] = useState(false);
   const [toggle, setToggle] = useState(true);
   const [chip, setChip] = useState("All");
+  const [editRow, setEditRow] = useState<Row | null>(null);
   const level = useLevel(listening);
   const orbState: OrbState = listening ? "listening" : "idle";
   const stat = STATS[range];
@@ -160,7 +165,8 @@ export default function DesignPage() {
       {/* Day details */}
       <Section title="Behind the number">
         <p className="label" style={{ margin: "0 0 8px" }}>A quiet day</p>
-        <Surface><div style={{ maxWidth: 430 }}><DayDetail rows={SAMPLE} custNames={SAMPLE_CUST} itemNames={SAMPLE_ITEMS} /></div></Surface>
+        <Surface><div style={{ maxWidth: 430 }}><DayDetail rows={SAMPLE} custNames={SAMPLE_CUST} itemNames={SAMPLE_ITEMS} onPick={setEditRow} /></div></Surface>
+        <EditEntry row={editRow} sb={STUB} shopId="x" custNames={SAMPLE_CUST} itemNames={SAMPLE_ITEMS} onClose={() => setEditRow(null)} onChanged={() => {}} />
         <p className="label" style={{ margin: "24px 0 8px" }}>A busy day: 140 sales, scroll inside the box</p>
         <div className="surface" style={{ maxWidth: 470, maxHeight: 620, overflowY: "auto", padding: "12px 20px" }}><DayDetail header={<h2 className="head" style={{ fontSize: 24, margin: "0 0 12px" }}>Today</h2>} rows={BUSY} custNames={SAMPLE_CUST} itemNames={SAMPLE_ITEMS} /></div>
       </Section>

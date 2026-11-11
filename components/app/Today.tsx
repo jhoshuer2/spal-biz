@@ -291,19 +291,28 @@ export function Today({ shop }: { shop: Shop }) {
                     <p style={bigLine}>{reply.limited ? "That's a lot for one day. I've kept your note and we'll carry on tomorrow." : "I kept your note, but I couldn't read it just now. I'll try again in a moment."}</p>
                     <div style={{ marginTop: 12 }}><Button kind="ghost" small onClick={() => setReply(null)}>OK</Button></div>
                   </>
-                ) : reply.lines.length === 0 && reply.question ? (
-                  <>
-                    <p style={bigLine}>{reply.question}</p>
-                    <div style={{ marginTop: 16 }}><TextField value={answer} onChange={setAnswer} placeholder="Type here" onSubmit={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} /></div>
-                    <div style={{ marginTop: 12, display: "grid" }}><Button onClick={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} disabled={!answer.trim() || busy}>{busy ? "One moment" : "Send"}</Button></div>
-                  </>
                 ) : (
                   <>
-                    <p className="label" style={{ margin: 0 }}>Got it</p>
-                    {reply.heard && <p className="label" style={{ margin: "4px 0 0", fontStyle: "italic" }}>I heard: “{reply.heard}”</p>}
-                    <div style={{ marginTop: 8, display: "grid", gap: 6 }}>{reply.lines.map((l, i) => <p key={i} style={bigLine}>{l}</p>)}</div>
-                    {reply.question && <p className="label" style={{ margin: "12px 0 0", fontSize: 16 }}>{reply.question}</p>}
-                    <div style={{ marginTop: 12 }}><Button kind="ghost" small onClick={undo}>Not right? Undo</Button></div>
+                    {reply.lines.length > 0 && (
+                      <>
+                        <p className="label" style={{ margin: 0 }}>{reply.changed ? "Fixed" : "Got it"}</p>
+                        {reply.heard && <p className="label" style={{ margin: "4px 0 0", fontStyle: "italic" }}>I heard: “{reply.heard}”</p>}
+                        <div style={{ marginTop: 8, display: "grid", gap: 6 }}>{reply.lines.map((l, i) => <p key={i} style={bigLine}>{l}</p>)}</div>
+                      </>
+                    )}
+                    {reply.question && (
+                      <div style={{ marginTop: reply.lines.length ? 16 : 0 }}>
+                        <p style={bigLine}>{reply.question}</p>
+                        <div style={{ marginTop: 12 }}><TextField value={answer} onChange={setAnswer} placeholder="Type here" onSubmit={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} /></div>
+                        <div style={{ marginTop: 12, display: "grid" }}><Button onClick={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} disabled={!answer.trim() || busy}>{busy ? "One moment" : "Send"}</Button></div>
+                      </div>
+                    )}
+                    {reply.lines.length > 0 && (
+                      <>
+                        <p className="label" style={{ margin: "12px 0 0", fontSize: 15 }}>Something wrong? Just tell me what to change.</p>
+                        <div style={{ marginTop: 4 }}><Button kind="ghost" small onClick={undo}>Undo</Button></div>
+                      </>
+                    )}
                   </>
                 )}
               </Surface>
@@ -409,7 +418,7 @@ export function Today({ shop }: { shop: Shop }) {
         ))}
       </Sheet>
 
-      <DaySheet open={detail !== null} onClose={() => setDetail(null)} sb={sb} startKey={detail ?? todayKey} todayKey={todayKey} custNames={custNames} itemNames={itemNames} />
+      <DaySheet open={detail !== null} onClose={() => setDetail(null)} sb={sb} shopId={shop.id} onChanged={refresh} startKey={detail ?? todayKey} todayKey={todayKey} custNames={custNames} itemNames={itemNames} />
 
       <SaveAccount open={saveOpen} onClose={() => setSaveOpen(false)} sb={sb} ownerFirst={first} />
 

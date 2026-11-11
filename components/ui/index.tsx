@@ -86,7 +86,7 @@ export function TabBar({ place, onPlace, listening, level, onTalk }: { place: Pl
   );
 }
 
-export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+export function Sheet({ open, onClose, title, children, layer = 0 }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; layer?: number }) {
   useEffect(() => {
     if (!open) return;
     const h = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -96,8 +96,8 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   if (!open) return null;
   return (
     <>
-      <div className="scrim" onClick={onClose} />
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="scrim" style={{ zIndex: 40 + layer * 2 }} onClick={onClose} />
+      <div className="sheet" style={{ zIndex: 41 + layer * 2 }} role="dialog" aria-modal="true" aria-label={title}>
         <div className="handle" />
         {children}
       </div>

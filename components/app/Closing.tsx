@@ -67,7 +67,7 @@ export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, today
     setNote("");
     if (reply.status === "failed") { setErr(reply.limited ? "That's a lot for one day. I've kept your note and we'll carry on tomorrow." : "I kept your note, but couldn't read it just now."); return; }
     if (reply.lines.length === 0 && reply.question) { setQuestion(reply); return; }
-    setQuestion(null);
+    setQuestion(reply.question ? reply : null);
     setAdded((a) => [...a, reply]);
     await refresh();
   }
@@ -97,7 +97,7 @@ export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, today
 
             {added.map((r) => (
               <Surface key={r.captureId} className="" >
-                <p className="label" style={{ margin: 0 }}>Got it</p>
+                <p className="label" style={{ margin: 0 }}>{r.changed ? "Fixed" : "Got it"}</p>
                 {r.heard && <p className="label" style={{ margin: "4px 0 0", fontStyle: "italic" }}>I heard: “{r.heard}”</p>}
                 {r.lines.map((l, i) => <p key={i} style={{ margin: "6px 0 0", fontSize: 18, fontWeight: 500 }}>{l}</p>)}
                 <div style={{ marginTop: 8 }}><Button kind="ghost" small onClick={() => undo(r)} style={{ color: "var(--ink-2)" }}>Not right? Undo</Button></div>
