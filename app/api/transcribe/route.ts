@@ -17,6 +17,11 @@ export async function POST(req: Request) {
   const { data: u } = await sb.auth.getUser(token);
   if (!u?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  const asUser = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } });
+  const { data: within, error: limErr } = await asUser.rpc("bump_usage", { p_kind: "transcribe", p_max: 100 });
+  if (limErr) console.warn("usage limit not active:", limErr.message);
+  else if (within === false) return NextResponse.json({ error: "limited" }, { status: 429 });
+
   const form = await req.formData().catch(() => null);
   const file = form?.get("audio");
   if (!(file instanceof Blob) || file.size === 0) return NextResponse.json({ error: "bad_request" }, { status: 400 });

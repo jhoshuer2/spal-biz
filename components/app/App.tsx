@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { supabaseBrowser, type Shop } from "@/lib/supabase";
+import { getCaptchaToken } from "@/lib/captcha";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { Onboarding } from "./Onboarding";
 import { Today } from "./Today";
@@ -19,7 +20,8 @@ export function App() {
     try {
       let { data: { session } } = await sb.auth.getSession();
       if (!session) {
-        const { data, error: e } = await sb.auth.signInAnonymously();
+        const captchaToken = await getCaptchaToken();
+        const { data, error: e } = await sb.auth.signInAnonymously(captchaToken ? { options: { captchaToken } } : undefined);
         if (e) throw e;
         session = data.session;
       }

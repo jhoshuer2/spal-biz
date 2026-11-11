@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Button, Icon, Sheet, TextField } from "@/components/ui";
+import { getCaptchaToken } from "@/lib/captcha";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const GOOGLE = process.env.NEXT_PUBLIC_GOOGLE_SIGNIN === "1";
@@ -28,7 +29,7 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
     const { error } =
       mode === "save"
         ? await sb.auth.updateUser({ email: to }, { emailRedirectTo: window.location.origin })
-        : await sb.auth.signInWithOtp({ email: to, options: { shouldCreateUser: false, emailRedirectTo: window.location.origin } });
+        : await sb.auth.signInWithOtp({ email: to, options: { shouldCreateUser: false, emailRedirectTo: window.location.origin, captchaToken: await getCaptchaToken().catch(() => undefined) } });
     setBusy(false);
     if (error) {
       const m = error.message.toLowerCase();

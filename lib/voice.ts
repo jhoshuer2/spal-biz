@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type VoiceState = "idle" | "recording" | "transcribing";
-export type VoiceResult = { text: string; blob: Blob } | { error: "denied" | "unsupported" | "empty" | "failed" };
+export type VoiceResult = { text: string; blob: Blob } | { error: "denied" | "unsupported" | "empty" | "failed" | "limited" };
 
 const MAX_MS = 60_000;
 const MIN_MS = 700;
@@ -91,8 +91,9 @@ export function useVoice(getToken: () => Promise<string>) {
       const fd = new FormData();
       fd.append("audio", blob);
       const res = await fetch("/api/transcribe", { method: "POST", headers: { Authorization: `Bearer ${await getToken()}` }, body: fd });
-      const j = await res.json();
       setState("idle");
+      if (res.status === 429) return { error: "limited" };
+      const j = await res.json();
       if (!res.ok) return { error: "failed" };
       return j.text ? { text: j.text as string, blob } : { error: "empty" };
     } catch {

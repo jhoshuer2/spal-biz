@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type Reply = { captureId: string; note: string; heard?: string; lines: string[]; question: string | null; status: "parsed" | "needs_answer" | "failed" };
+export type Reply = { captureId: string; note: string; heard?: string; lines: string[]; question: string | null; status: "parsed" | "needs_answer" | "failed"; limited?: boolean };
 
 /** Keep her words, then ask Spal to understand them. The raw note is always kept, even if reading it fails. */
 export async function sendNote(sb: SupabaseClient, shopId: string, text: string, context?: string, voice?: { blob: Blob }): Promise<{ reply?: Reply; keepFailed?: boolean }> {
@@ -18,6 +18,7 @@ export async function sendNote(sb: SupabaseClient, shopId: string, text: string,
   try {
     const { data: { session } } = await sb.auth.getSession();
     const r = await fetch("/api/parse", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` }, body: JSON.stringify({ capture_id: cap.id, context }) });
+    if (r.status === 429) return { reply: { ...failed, limited: true } };
     const j = await r.json();
     if (!r.ok || j.status === "failed") return { reply: failed };
     return { reply: { captureId: cap.id, note: t, heard, lines: j.lines ?? [], question: j.question ?? null, status: j.status } };

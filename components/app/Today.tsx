@@ -1,14 +1,16 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, DeltaPill, Icon, ListRow, Orb, Roll, Sheet, Surface, TabBar, TalkButton, TextField, type Place } from "@/components/ui";
 import { sendNote, undoNote, type Reply } from "@/lib/capture";
-import { dayKey, forDay, salesOf, spentOf, type DayEvent, type Summary } from "@/lib/day";
+import { dayKey, forDay, keyOf, salesOf, spentOf, type DayEvent, type Summary } from "@/lib/day";
 import { naira } from "@/lib/format";
 import type { Shop } from "@/lib/supabase";
 import { supabaseBrowser } from "@/lib/supabase";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { useVoice } from "@/lib/voice";
 import { Closing } from "./Closing";
+import { ReminderCard } from "./Reminder";
+import { draftReminder, reminderTitle } from "@/lib/reminders";
 import { SaveAccount } from "./SaveAccount";
 
 const greeting = (h: number) => (h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening");
@@ -16,6 +18,7 @@ const CLOSING_FROM_HOUR = 18;
 
 type Owing = { name: string; kobo: number };
 type Close = { day: string; total_kobo: number | null; summary: string | null };
+type Remind = { proposalId: string; customerId: string; name: string; phone: string | null; title: string; draft: string };
 
 export function Today({ shop }: { shop: Shop }) {
   const { mode, setMode } = useTheme();
@@ -33,6 +36,8 @@ export function Today({ shop }: { shop: Shop }) {
   const [owing, setOwing] = useState<Owing[]>([]);
   const [itemNames, setItemNames] = useState<Map<string, string>>(new Map());
   const [closes, setCloses] = useState<Close[]>([]);
+  const [remind, setRemind] = useState<Remind | null>(null);
+  const creating = useRef(false);
   const [anonymous, setAnonymous] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -50,19 +55,52 @@ export function Today({ shop }: { shop: Shop }) {
     const since = new Date();
     since.setDate(since.getDate() - 14);
     since.setHours(0, 0, 0, 0);
-    const [{ data: ev }, { data: debts }, { data: custs }, { data: items }, { data: dc }] = await Promise.all([
+    const props = new Date();
+    props.setDate(props.getDate() - 3);
+    const [{ data: ev }, { data: debts }, { data: custs }, { data: items }, { data: dc }, { data: props_ }, { data: credits }] = await Promise.all([
       sb.from("event").select("kind, amount_kobo, occurred_at, item_id, quantity").gte("occurred_at", since.toISOString()),
-      sb.from("debt").select("customer_id, owed_kobo"),
-      sb.from("customer").select("id, name"),
+      sb.from("debt").select("customer_id, owed_kobo, next_due"),
+      sb.from("customer").select("id, name, phone"),
       sb.from("item").select("id, name"),
       sb.from("day_close").select("day, total_kobo, summary").order("day", { ascending: false }).limit(3),
+      sb.from("proposal").select("id, customer_id, draft_text, status, created_at").eq("kind", "debt_reminder").gte("created_at", props.toISOString()),
+      sb.from("event").select("customer_id, note, item_id").eq("kind", "credit_sale").order("occurred_at", { ascending: false }).limit(200),
     ]);
     setRecent((ev ?? []) as DayEvent[]);
     const names = new Map((custs ?? []).map((c) => [c.id as string, c.name as string]));
     setOwing(((debts ?? []) as { customer_id: string; owed_kobo: number }[]).map((d) => ({ name: names.get(d.customer_id) ?? "Someone", kobo: Number(d.owed_kobo) })).sort((a, b) => b.kobo - a.kobo));
     setItemNames(new Map((items ?? []).map((i) => [i.id as string, i.name as string])));
     setCloses((dc ?? []) as Close[]);
-  }, [sb]);
+
+    // Spal's first offer to act: a debt that is due. One at a time, never the same person twice in a day.
+    const todayK = dayKey(new Date());
+    const phones = new Map((custs ?? []).map((c) => [c.id as string, (c.phone as string | null) ?? null]));
+    const due = ((debts ?? []) as { customer_id: string; owed_kobo: number; next_due: string | null }[])
+      .filter((d) => d.next_due && d.next_due <= todayK && Number(d.owed_kobo) > 0)
+      .sort((a, b) => Number(b.owed_kobo) - Number(a.owed_kobo));
+    const proposals = (props_ ?? []) as { id: string; customer_id: string; draft_text: string | null; status: string; created_at: string }[];
+    const itemMap = new Map((items ?? []).map((i) => [i.id as string, i.name as string]));
+    let next: Remind | null = null;
+    for (const d of due) {
+      const name = names.get(d.customer_id) ?? "Someone";
+      const mine = proposals.filter((p) => p.customer_id === d.customer_id);
+      const pending = mine.find((p) => p.status === "pending");
+      const handledToday = mine.some((p) => p.status !== "pending" && keyOf(p.created_at) === todayK);
+      if (handledToday) continue;
+      const args = { name, owedKobo: Number(d.owed_kobo), dueDate: d.next_due as string, todayKey: todayK };
+      if (pending) { next = { proposalId: pending.id, customerId: d.customer_id, name, phone: phones.get(d.customer_id) ?? null, title: reminderTitle(args), draft: pending.draft_text ?? "" }; break; }
+      if (creating.current) break;
+      creating.current = true;
+      const c = ((credits ?? []) as { customer_id: string; note: string | null; item_id: string | null }[]).find((x) => x.customer_id === d.customer_id);
+      const forWhat = c?.item_id ? itemMap.get(c.item_id) : c?.note;
+      const draft = draftReminder({ ...args, shop: shop.name ?? "", forWhat });
+      const { data: row } = await sb.from("proposal").insert({ shop_id: shop.id, kind: "debt_reminder", customer_id: d.customer_id, draft_text: draft }).select("id").single();
+      creating.current = false;
+      if (row) next = { proposalId: row.id as string, customerId: d.customer_id, name, phone: phones.get(d.customer_id) ?? null, title: reminderTitle(args), draft };
+      break;
+    }
+    setRemind(next);
+  }, [sb, shop.id, shop.name]);
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
     sb.auth.getUser().then(({ data }) => { setAnonymous(!!data.user?.is_anonymous); setEmail(data.user?.email ?? null); });
@@ -104,7 +142,7 @@ export function Today({ shop }: { shop: Shop }) {
   async function stopAndSend() {
     const r = await voice.finish();
     if ("error" in r) {
-      setErr(r.error === "empty" ? "I didn't hear anything. Tap the button and try again." : "I couldn't hear that. You can type it instead.");
+      setErr(r.error === "empty" ? "I didn't hear anything. Tap the button and try again." : r.error === "limited" ? "That's a lot of talking for one day. You can still type to me." : "I couldn't hear that. You can type it instead.");
       setTalkMode("text");
       return;
     }
@@ -114,6 +152,16 @@ export function Today({ shop }: { shop: Shop }) {
   function closeTalk() {
     voice.cancel();
     setTalk(false);
+  }
+
+  async function reminderSent(r: Remind, f: { text: string; edited: boolean; phone: string | null }) {
+    if (f.phone && f.phone !== r.phone) await sb.from("customer").update({ phone: f.phone }).eq("id", r.customerId);
+    await sb.from("proposal").update({ status: f.edited ? "edited" : "approved", draft_text: f.text, decided_at: new Date().toISOString() }).eq("id", r.proposalId);
+  }
+
+  async function reminderLater(r: Remind) {
+    await sb.from("proposal").update({ status: "declined", decided_at: new Date().toISOString() }).eq("id", r.proposalId);
+    setRemind(null);
   }
 
   async function undo() {
@@ -167,6 +215,11 @@ export function Today({ shop }: { shop: Shop }) {
       <div style={{ padding: "8px 16px", maxWidth: 560, margin: "0 auto", display: "grid", gap: 12 }}>
         {place === "today" ? (
           <>
+            {remind && (
+              <ReminderCard key={remind.proposalId} title={remind.title} draft={remind.draft} name={remind.name} phone={remind.phone}
+                onSent={(f) => reminderSent(remind, f)} onLater={() => reminderLater(remind)} />
+            )}
+
             {/* Spal speaks first: closing in the evening */}
             {evening && !closedToday && (
               <Surface>
@@ -186,7 +239,7 @@ export function Today({ shop }: { shop: Shop }) {
               <Surface>
                 {reply.status === "failed" ? (
                   <>
-                    <p style={bigLine}>I kept your note, but I couldn't read it just now. I'll try again in a moment.</p>
+                    <p style={bigLine}>{reply.limited ? "That's a lot for one day. I've kept your note and we'll carry on tomorrow." : "I kept your note, but I couldn't read it just now. I'll try again in a moment."}</p>
                     <div style={{ marginTop: 12 }}><Button kind="ghost" small onClick={() => setReply(null)}>OK</Button></div>
                   </>
                 ) : reply.lines.length === 0 && reply.question ? (

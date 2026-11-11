@@ -46,7 +46,7 @@ export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, today
       setBusy(true);
       const r = await voice.finish();
       setBusy(false);
-      if ("error" in r) { setErr(r.error === "empty" ? "I didn't hear anything. Try again." : "I couldn't hear that. You can type it instead."); return; }
+      if ("error" in r) { setErr(r.error === "empty" ? "I didn't hear anything. Try again." : r.error === "limited" ? "That's a lot of talking for one day. You can still type to me." : "I couldn't hear that. You can type it instead."); return; }
       await submit(r.text, r.blob);
       return;
     }
@@ -65,7 +65,7 @@ export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, today
     setBusy(false);
     if (keepFailed || !reply) { setErr("I couldn't keep that. Please try again."); return; }
     setNote("");
-    if (reply.status === "failed") { setErr("I kept your note, but couldn't read it just now."); return; }
+    if (reply.status === "failed") { setErr(reply.limited ? "That's a lot for one day. I've kept your note and we'll carry on tomorrow." : "I kept your note, but couldn't read it just now."); return; }
     if (reply.lines.length === 0 && reply.question) { setQuestion(reply); return; }
     setQuestion(null);
     setAdded((a) => [...a, reply]);

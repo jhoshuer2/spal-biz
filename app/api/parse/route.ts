@@ -89,9 +89,14 @@ export async function POST(req: Request) {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // Daily cap per account. If the limits migration has not been run yet, carry on (and say so in the logs).
+  const { data: within, error: limErr } = await sb.rpc("bump_usage", { p_kind: "parse", p_max: 150 });
+  if (limErr) console.warn("usage limit not active:", limErr.message);
+  else if (within === false) return NextResponse.json({ status: "limited" }, { status: 429 });
+
   const { data: capture } = await sb.from("capture").select("id, shop_id, text_content, transcript").eq("id", body.capture_id).maybeSingle();
   if (!capture) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const note = clean(capture.text_content) || clean(capture.transcript);
+  const note = (clean(capture.text_content) || clean(capture.transcript)).slice(0, 1500);
   if (!note) return NextResponse.json({ error: "empty" }, { status: 400 });
 
   const [{ data: shop }, { data: customers }, { data: items }] = await Promise.all([
