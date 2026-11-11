@@ -89,6 +89,7 @@ export function Today({ shop }: { shop: Shop }) {
   async function closeDay(s: Summary) {
     await sb.from("day_close").upsert({ shop_id: shop.id, day: todayKey, summary: s.text, total_kobo: s.total }, { onConflict: "shop_id,day" });
     setClosing(false);
+    setReply(null);
     refresh();
   }
 

@@ -162,7 +162,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 }
 
 /* ============ Surface, chips, rows ============ */
-.surface { background: var(--surface); border-radius: var(--r-card); padding: 20px; }
+.surface { background: var(--surface); color: var(--ink); border-radius: var(--r-card); padding: 20px; }
 :root[data-theme="dark"] .surface { box-shadow: inset 0 0 0 1px var(--line); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) .surface { box-shadow: inset 0 0 0 1px var(--line); }

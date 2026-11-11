@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, DeltaPill, Icon, Orb, Roll, Surface, TextField } from "@/components/ui";
 import { naira } from "@/lib/format";
 import { closingCase, countOf, salesOf, summarize, type DayEvent, type Summary } from "@/lib/day";
@@ -22,6 +22,9 @@ export function Closing({ sb, shopId, ownerFirst, today, recent, todayKey, itemN
   const [added, setAdded] = useState<Reply[]>([]);
   const [question, setQuestion] = useState<Reply | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // Make sure the first question is based on everything she has told me.
+  useEffect(() => { refresh(); }, [refresh]);
 
   const kind = closingCase(today, recent, todayKey);
   const n = countOf(today);
