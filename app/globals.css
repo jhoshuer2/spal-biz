@@ -243,3 +243,8 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Closing overlay: indigo field in both themes, so controls that use theme ink need a mood-aware version */
+.on-mood { color: var(--mood-ink); }
+.on-mood .btn-ghost { color: var(--mood-ink-2); }
+.on-mood .head { color: var(--mood-ink); }
