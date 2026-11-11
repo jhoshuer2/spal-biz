@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, DeltaPill, Icon, ListRow, Orb, Roll, Sheet, Surface, TabBar, TalkButton, TextField, type Place } from "@/components/ui";
 import { sendNote, undoNote, type Reply } from "@/lib/capture";
-import { dayKey, forDay, keyOf, salesOf, spentOf, type DayEvent, type Summary } from "@/lib/day";
+import { clockLabel, dayKey, forDay, keyOf, learnCloseMinutes, minutesOf, salesOf, spentOf, timeOf, type DayEvent, type Summary } from "@/lib/day";
+import { squarePhoto } from "@/lib/image";
 import { naira } from "@/lib/format";
 import type { Shop } from "@/lib/supabase";
 import { supabaseBrowser } from "@/lib/supabase";
@@ -12,9 +13,10 @@ import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
 import { SaveAccount } from "./SaveAccount";
+import { DaySheet } from "./DaySheet";
 
 const greeting = (h: number) => (h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening");
-const CLOSING_FROM_HOUR = 18;
+const DEFAULT_CLOSE_MIN = 18 * 60; // until Spal has learned her habit
 
 type Owing = { name: string; kobo: number };
 type Close = { day: string; total_kobo: number | null; summary: string | null };
@@ -36,6 +38,13 @@ export function Today({ shop }: { shop: Shop }) {
   const [owing, setOwing] = useState<Owing[]>([]);
   const [itemNames, setItemNames] = useState<Map<string, string>>(new Map());
   const [closes, setCloses] = useState<Close[]>([]);
+  const [detail, setDetail] = useState<string | null>(null);
+  const [custNames, setCustNames] = useState<Map<string, string>>(new Map());
+  const [avatar, setAvatar] = useState<string | null>(shop.avatar ?? null);
+  const [photoErr, setPhotoErr] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [closeMin, setCloseMin] = useState<number>(minutesOf(shop.usual_close_time) ?? DEFAULT_CLOSE_MIN);
+  const [learned, setLearned] = useState(minutesOf(shop.usual_close_time) != null);
   const [remind, setRemind] = useState<Remind | null>(null);
   const creating = useRef(false);
   const [anonymous, setAnonymous] = useState(false);
@@ -70,6 +79,7 @@ export function Today({ shop }: { shop: Shop }) {
     const names = new Map((custs ?? []).map((c) => [c.id as string, c.name as string]));
     setOwing(((debts ?? []) as { customer_id: string; owed_kobo: number }[]).map((d) => ({ name: names.get(d.customer_id) ?? "Someone", kobo: Number(d.owed_kobo) })).sort((a, b) => b.kobo - a.kobo));
     setItemNames(new Map((items ?? []).map((i) => [i.id as string, i.name as string])));
+    setCustNames(names);
     setCloses((dc ?? []) as Close[]);
 
     // Spal's first offer to act: a debt that is due. One at a time, never the same person twice in a day.
@@ -112,7 +122,7 @@ export function Today({ shop }: { shop: Shop }) {
   const hasToday = today.length > 0;
   const closedToday = closes.find((c) => c.day === todayKey);
   const lastClose = closes.find((c) => c.day < todayKey);
-  const evening = hour >= CLOSING_FROM_HOUR;
+  const evening = hour * 60 + now.getMinutes() >= closeMin;
   const mood = evening ? "evening" : "normal";
 
   async function send(text: string, context?: string, voiceBlob?: Blob) {
@@ -175,6 +185,14 @@ export function Today({ shop }: { shop: Shop }) {
 
   async function closeDay(s: Summary) {
     await sb.from("day_close").upsert({ shop_id: shop.id, day: todayKey, summary: s.text, total_kobo: s.total }, { onConflict: "shop_id,day" });
+    // Learn her habit: the middle of when she closed on her last few days.
+    const { data: last } = await sb.from("day_close").select("closed_at").order("day", { ascending: false }).limit(7);
+    const found = learnCloseMinutes((last ?? []).map((c) => c.closed_at as string));
+    if (found != null && found !== closeMin) {
+      setCloseMin(found);
+      setLearned(true);
+      await sb.from("shop").update({ usual_close_time: timeOf(found) }).eq("id", shop.id);
+    }
     setClosing(false);
     setReply(null);
     refresh();
@@ -187,10 +205,35 @@ export function Today({ shop }: { shop: Shop }) {
     }
   }
 
+  async function changePhoto(file: File | undefined) {
+    if (!file) return;
+    setPhotoErr(null);
+    setPhotoBusy(true);
+    try {
+      const data = await squarePhoto(file);
+      const { error } = await sb.from("shop").update({ avatar: data }).eq("id", shop.id);
+      if (error) throw error;
+      setAvatar(data);
+    } catch {
+      setPhotoErr("I couldn't use that photo. Try another one.");
+    }
+    setPhotoBusy(false);
+  }
+
+  async function removePhoto() {
+    setAvatar(null);
+    await sb.from("shop").update({ avatar: null }).eq("id", shop.id);
+  }
+
   async function chooseTheme(m: ThemeMode) {
     setMode(m);
     await sb.from("shop").update({ theme: m }).eq("id", shop.id); // ignored until the theme column exists
   }
+
+  // Days she has recorded, newest first, for the History list in My business.
+  const dayList = [...new Set(recent.map((e) => keyOf(e.occurred_at)))].sort().reverse().slice(0, 14).map((k) => ({ k, total: salesOf(forDay(recent, k)) }));
+  const dayLabel = (k: string) => (k === todayKey ? "Today" : new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short" }).format(new Date(k + "T12:00:00")));
+  const initial = (shop.owner_name ?? "?").trim()[0]?.toUpperCase() ?? "?";
 
   const bigLine = { margin: 0, fontSize: 20, fontWeight: 500, lineHeight: 1.35 } as const;
 
@@ -198,7 +241,9 @@ export function Today({ shop }: { shop: Shop }) {
     <main data-mood={mood} style={{ minHeight: "100dvh", background: "var(--bg)", paddingBottom: 140 }}>
       <div className="mood-field" style={{ padding: "20px 24px 8px" }}>
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button className="icon-btn" aria-label="Profile" onClick={() => setProfile(true)}><Icon name="user" /></button>
+          <button className={`icon-btn ${avatar ? "photo" : ""}`} aria-label="Profile" onClick={() => setProfile(true)}>
+            {avatar ? <img src={avatar} alt="" className="avatar" width={48} height={48} /> : <Icon name="user" />}
+          </button>
         </div>
         {place === "today" ? (
           <>
@@ -261,11 +306,11 @@ export function Today({ shop }: { shop: Shop }) {
             )}
 
             {hasToday ? (
-              <Surface>
-                <span className="label">Today so far</span>
-                <div className="num" style={{ fontSize: 64, marginTop: 14 }}><Roll prefix="₦" value={Math.round(sales / 100)} /></div>
-                {spent > 0 && <div style={{ marginTop: 14 }}><DeltaPill tone="flat">Spent {naira(spent)}</DeltaPill></div>}
-              </Surface>
+              <button className="surface tap-card" onClick={() => setDetail(todayKey)} aria-label="See what is behind today's number">
+                <span className="label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>Today so far <Icon name="chevron" size={20} /></span>
+                <span className="num" style={{ fontSize: 64, marginTop: 14, display: "block" }}><Roll prefix="₦" value={Math.round(sales / 100)} /></span>
+                {spent > 0 && <span style={{ marginTop: 14, display: "block" }}><DeltaPill tone="flat">Spent {naira(spent)}</DeltaPill></span>}
+              </button>
             ) : !reply && !evening ? (
               <Surface>
                 <p style={bigLine}>
@@ -286,11 +331,20 @@ export function Today({ shop }: { shop: Shop }) {
             )}
           </>
         ) : (
+          <>
           <Surface>
             <ListRow label="Shop" value={shop.name ?? ""} chevron={false} />
             <ListRow label="Sells" value={shop.sells ?? ""} chevron={false} />
             <ListRow label="Owing you" value={naira(owing.reduce((s, o) => s + o.kobo, 0))} chevron={false} />
           </Surface>
+          <Surface>
+            <span className="label">Your days</span>
+            <div style={{ marginTop: 4 }}>
+              {dayList.length === 0 && <p className="label" style={{ margin: "12px 0 4px", fontSize: 17 }}>Nothing yet. Tell me about your first sale.</p>}
+              {dayList.map((d) => <ListRow key={d.k} label={dayLabel(d.k)} value={d.total > 0 ? naira(d.total) : ""} onClick={() => setDetail(d.k)} />)}
+            </div>
+          </Surface>
+          </>
         )}
       </div>
 
@@ -318,8 +372,23 @@ export function Today({ shop }: { shop: Shop }) {
       </Sheet>
 
       <Sheet open={profile} onClose={() => setProfile(false)} title="Profile">
-        <h2 className="head" style={{ fontSize: 26, margin: "0 0 4px" }}>{shop.owner_name}</h2>
-        <p className="label" style={{ margin: "0 0 12px" }}>{shop.name}</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 8 }}>
+          {avatar ? <img src={avatar} alt="Your photo" className="avatar" width={72} height={72} /> : <div className="avatar-fallback" style={{ width: 72, height: 72, fontSize: 30 }}>{initial}</div>}
+          <div style={{ minWidth: 0 }}>
+            <h2 className="head" style={{ fontSize: 26, margin: "0 0 2px" }}>{shop.owner_name}</h2>
+            <p className="label" style={{ margin: 0 }}>{shop.name}</p>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+          <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
+            {photoBusy ? "One moment" : avatar ? "Change photo" : "Add a photo"}
+            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { changePhoto(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+          {avatar && <Button kind="ghost" small onClick={removePhoto}>Remove</Button>}
+        </div>
+        {photoErr && <p role="alert" style={{ color: "var(--care-text)", margin: "4px 0 8px" }}>{photoErr}</p>}
+        <p className="label" style={{ margin: "16px 0 4px" }}>Closing time</p>
+        <div className="row"><span>About {clockLabel(closeMin)}</span><span className="label" style={{ fontSize: 14 }}>{learned ? "learned from you" : "until I learn"}</span></div>
         <p className="label" style={{ margin: "16px 0 4px" }}>Account</p>
         {anonymous ? (
           <button className="row" onClick={() => { setProfile(false); setSaveOpen(true); }}><span>Save my account</span><Icon name="chevron" size={20} /></button>
@@ -334,6 +403,8 @@ export function Today({ shop }: { shop: Shop }) {
           </button>
         ))}
       </Sheet>
+
+      <DaySheet open={detail !== null} onClose={() => setDetail(null)} sb={sb} startKey={detail ?? todayKey} todayKey={todayKey} custNames={custNames} itemNames={itemNames} />
 
       <SaveAccount open={saveOpen} onClose={() => setSaveOpen(false)} sb={sb} ownerFirst={first} />
 

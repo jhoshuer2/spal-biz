@@ -224,7 +224,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 
 /* ============ Sheet ============ */
 .scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 40; animation: fade 0.2s ease-out; }
-.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; margin: 0 auto; max-width: 560px; background: var(--surface); border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: 12px 20px 28px; animation: rise 0.25s ease-out; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; margin: 0 auto; max-width: 560px; background: var(--surface); border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: 12px 20px 28px; max-height: 88dvh; overflow-y: auto; overscroll-behavior: contain; animation: rise 0.25s ease-out; }
 .sheet .handle { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 16px; background: var(--ink-3); opacity: 0.4; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes rise { from { transform: translateY(24px); opacity: 0; } }
@@ -251,3 +251,10 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .on-mood .head { color: var(--mood-ink); }
 .on-mood .label { color: var(--mood-ink-2); }
 .on-mood .surface .label { color: var(--ink-2); }
+
+/* Photo */
+.avatar { border-radius: 50%; object-fit: cover; display: block; background: var(--surface-2); }
+.avatar-fallback { border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--ink); font-family: var(--font-head); font-weight: 700; }
+.icon-btn.photo { padding: 0; overflow: hidden; }
+.tap-card { cursor: pointer; transition: transform 0.12s ease-out; text-align: left; border: 0; width: 100%; font: inherit; }
+.tap-card:active { transform: scale(0.99); }

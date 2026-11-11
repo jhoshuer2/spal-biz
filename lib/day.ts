@@ -66,3 +66,25 @@ export function summarize(today: DayEvent[], recent: DayEvent[], itemNames: Map<
   if (!parts.length) parts.push("A quiet day. Nothing recorded");
   return { total, count, spent, best, owing, delta, text: parts.map(cap).join(". ") + "." };
 }
+
+/** Minutes after midnight, from a "HH:MM" or "HH:MM:SS" time. */
+export const minutesOf = (t: string | null | undefined) => {
+  const m = /^(\d{1,2}):(\d{2})/.exec(t ?? "");
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+export const timeOf = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}:00`;
+export const clockLabel = (min: number) => {
+  const h = Math.floor(min / 60), m = min % 60;
+  return `${h % 12 || 12}${m ? ":" + String(m).padStart(2, "0") : ""} ${h < 12 ? "am" : "pm"}`;
+};
+
+/**
+ * Her usual closing time, learned from when she really closes: the middle of her last few closings.
+ * Needs at least 3 days, and stays between 4pm and 11pm.
+ */
+export function learnCloseMinutes(closedAt: string[]): number | null {
+  const mins = closedAt.map((c) => { const d = new Date(c); return d.getHours() * 60 + d.getMinutes(); }).sort((a, b) => a - b);
+  if (mins.length < 3) return null;
+  const mid = mins[Math.floor(mins.length / 2)];
+  return Math.min(23 * 60, Math.max(16 * 60, Math.round(mid / 5) * 5));
+}

@@ -9,4 +9,4 @@ export function supabaseBrowser(): SupabaseClient {
   return client;
 }
 
-export type Shop = { id: string; owner_name: string | null; name: string | null; sells: string | null; theme: string | null };
+export type Shop = { id: string; owner_name: string | null; name: string | null; sells: string | null; theme: string | null; avatar?: string | null; usual_close_time?: string | null };
