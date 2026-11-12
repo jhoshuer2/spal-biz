@@ -10,7 +10,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ask Spal to check reminders
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -fsS -X POST "https://spal-biz.vercel.app/api/cron/nudges" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            --max-time 60
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET is not set in GitHub. Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          code=$(curl -sS -o response.txt -w "%{http_code}" -X POST "https://spal-biz.vercel.app/api/cron/nudges" \
+            -H "Authorization: Bearer $CRON_SECRET" --max-time 60) || { echo "Could not reach the app."; exit 1; }
+          echo "HTTP $code"
+          cat response.txt; echo
+          case "$code" in
+            2*) exit 0 ;;
+            401) echo "The secret in GitHub does not match CRON_SECRET in Vercel." ;;
+            503) echo "The app is missing a setting in Vercel: CRON_SECRET, SUPABASE_SERVICE_ROLE_KEY, or the push keys." ;;
+            *) echo "The app answered with an error. See the response above." ;;
+          esac
+          exit 1

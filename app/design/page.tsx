@@ -6,6 +6,7 @@ import type { OrbState, OrbTone } from "@/components/ui/Orb";
 import { DayDetail, type Row } from "@/components/app/DaySheet";
 import { EditEntry } from "@/components/app/EditEntry";
 import { SetPassword } from "@/components/app/SetPassword";
+import { SaveAccount } from "@/components/app/SaveAccount";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Mood = "strong" | "normal" | "slow" | "evening";
@@ -41,7 +42,7 @@ const BUSY: Row[] = [
 const SAMPLE_CUST = new Map([["chidi", "Mama Chidi"], ["blessing", "Blessing"], ["emeka", "Emeka"]]);
 const SAMPLE_ITEMS = new Map([["rice", "bag of rice"], ["milk", "tin of milk"], ["bread", "bread"], ["sugar", "sugar"], ["oil", "palm oil"]]);
 
-const STUB = { auth: { updateUser: async () => ({ error: null }) } } as unknown as SupabaseClient; // the edit form only touches the database when saved
+const STUB = { auth: { updateUser: async () => ({ error: null }), signInWithOtp: async () => ({ error: null }), verifyOtp: async () => ({ error: { message: "bad" } }) } } as unknown as SupabaseClient; // the edit form only touches the database when saved
 
 function useLevel(active: boolean) {
   const [level, setLevel] = useState(0);
@@ -74,6 +75,7 @@ export default function DesignPage() {
   const [chip, setChip] = useState("All");
   const [editRow, setEditRow] = useState<Row | null>(null);
   const [pwOpen, setPwOpen] = useState(false);
+  const [signinOpen, setSigninOpen] = useState(false);
   const level = useLevel(listening);
   const orbState: OrbState = listening ? "listening" : "idle";
   const stat = STATS[range];
@@ -219,7 +221,8 @@ export default function DesignPage() {
         </div>
       </Section>
 
-      <Section title="Account sheets"><Button kind="secondary" onClick={() => setPwOpen(true)}>Open the password sheet</Button></Section>
+      <Section title="Account sheets"><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Button kind="secondary" onClick={() => setPwOpen(true)}>Open the password sheet</Button><Button kind="secondary" onClick={() => setSigninOpen(true)}>Open the sign-in sheet</Button></div></Section>
+      <SaveAccount open={signinOpen} onClose={() => setSigninOpen(false)} sb={STUB} mode="signin" />
       <SetPassword open={pwOpen} onClose={() => setPwOpen(false)} sb={STUB} email="amaka@example.com" />
 
       <Sheet open={sheet} onClose={() => setSheet(false)} title="Theme">

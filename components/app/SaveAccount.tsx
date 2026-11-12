@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Icon, Sheet, TextField } from "@/components/ui";
 import { getCaptchaToken } from "@/lib/captcha";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -18,13 +18,16 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
   const [code, setCode] = useState("");
   const [pw, setPw] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [wait, setWait] = useState(0); // seconds until another email can be asked for
+  const [again, setAgain] = useState(false);
+  useEffect(() => { if (wait <= 0) return; const t = setTimeout(() => setWait((w) => w - 1), 1000); return () => clearTimeout(t); }, [wait]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const valid = /^\S+@\S+\.\S+$/.test(email.trim());
 
-  async function sendEmail() {
-    if (!valid || busy) return;
+  async function sendEmail(resend = false) {
+    if (!valid || busy || (resend && wait > 0)) return;
     setBusy(true);
     setErr(null);
     const to = email.trim().toLowerCase();
@@ -43,6 +46,8 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
       );
       return;
     }
+    setAgain(resend);
+    setWait(60);
     setStep("sent");
   }
 
@@ -62,9 +67,15 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
     setBusy(true);
     setErr(null);
     const to = email.trim().toLowerCase();
-    const { error } = await sb.auth.verifyOtp({ email: to, token: code.trim(), type: mode === "save" ? "email_change" : "email" });
+    // The email can be a sign-in message or a confirmation, depending on the account, so try each kind of code.
+    const kinds = mode === "save" ? (["email_change"] as const) : (["email", "signup", "magiclink"] as const);
+    let ok = false;
+    for (const type of kinds) {
+      const { error } = await sb.auth.verifyOtp({ email: to, token: code.replace(/\D/g, ""), type });
+      if (!error) { ok = true; break; }
+    }
     setBusy(false);
-    if (error) { setErr("That code didn't work. Check it and try again."); return; }
+    if (!ok) { setErr("That code didn't work. It may have run out. You can ask for a new one."); return; }
     window.location.reload();
   }
 
@@ -92,16 +103,16 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
       {step === "email" && (
         <>
           <h2 className="head" style={{ fontSize: 28, margin: "0 0 16px" }}>{mode === "save" ? "What's your email?" : "Sign in with your email"}</h2>
-          <TextField value={email} onChange={setEmail} onSubmit={sendEmail} placeholder="amaka@example.com" autoFocus />
+          <TextField value={email} onChange={setEmail} onSubmit={() => sendEmail()} placeholder="amaka@example.com" autoFocus />
           {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
           <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
             {mode === "signin" ? (
               <>
                 <Button block onClick={() => { setErr(null); setStep("password"); }} disabled={!valid}>Use my password</Button>
-                <Button kind="secondary" block onClick={sendEmail} disabled={!valid || busy}>{busy ? "One moment" : "Email me a link instead"}</Button>
+                <Button kind="secondary" block onClick={() => sendEmail()} disabled={!valid || busy}>{busy ? "One moment" : "Email me a link instead"}</Button>
               </>
             ) : (
-              <Button block onClick={sendEmail} disabled={!valid || busy}>{busy ? "One moment" : "Send me a link"}</Button>
+              <Button block onClick={() => sendEmail()} disabled={!valid || busy}>{busy ? "One moment" : "Send me a link"}</Button>
             )}
             {mode === "save" && <Button kind="ghost" block onClick={() => setStep("choose")}>Back</Button>}
           </div>
@@ -117,7 +128,7 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
           {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
           <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
             <Button block onClick={signInWithPassword} disabled={!pw || busy}>{busy ? "One moment" : "Sign in"}</Button>
-            <Button kind="secondary" block onClick={sendEmail} disabled={busy}>Email me a link instead</Button>
+            <Button kind="secondary" block onClick={() => sendEmail()} disabled={busy}>Email me a link instead</Button>
             <Button kind="ghost" block onClick={() => { setErr(null); setStep("email"); }}>Back</Button>
           </div>
         </>
@@ -125,14 +136,16 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
 
       {step === "sent" && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--good-text)", marginBottom: 8 }}><Icon name="check" size={24} /><span style={{ fontWeight: 600 }}>Check your email</span></div>
-          <h2 className="head" style={{ fontSize: 26, margin: "0 0 8px" }}>I sent a link to {email.trim()}</h2>
-          <p className="label" style={{ margin: "0 0 20px", fontSize: 17 }}>Open it on this phone and you're done. Got a code instead? Type it here.</p>
-          <TextField value={code} onChange={setCode} onSubmit={verify} placeholder="6-digit code" />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--good-text)", marginBottom: 8 }}><Icon name="check" size={24} /><span style={{ fontWeight: 600 }}>{again ? "Sent again" : "Check your email"}</span></div>
+          <h2 className="head" style={{ fontSize: 26, margin: "0 0 8px" }}>I sent a message to {email.trim()}</h2>
+          <p className="label" style={{ margin: "0 0 16px", fontSize: 17 }}>Type the code from the email here, or tap the link in it on this phone.</p>
+          <TextField value={code} onChange={(v) => setCode(v.replace(/\D/g, ""))} onSubmit={verify} placeholder="Code from the email" inputMode="numeric" autoComplete="one-time-code" />
           {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
+          <p className="label" style={{ margin: "12px 4px 0", fontSize: 15 }}>Nothing yet? It can take a minute. Check your spam or junk folder too.</p>
           <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
             <Button block onClick={verify} disabled={!code.trim() || busy}>{busy ? "One moment" : "Use code"}</Button>
-            <Button kind="ghost" block onClick={onClose}>Close</Button>
+            <Button kind="secondary" block onClick={() => sendEmail(true)} disabled={wait > 0 || busy}>{wait > 0 ? `Send it again in ${wait}s` : "Send it again"}</Button>
+            <Button kind="ghost" block onClick={() => { setCode(""); setErr(null); setStep(mode === "signin" ? "email" : "email"); }}>Use a different email</Button>
           </div>
         </>
       )}
