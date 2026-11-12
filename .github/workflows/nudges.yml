@@ -7,7 +7,9 @@ on:
   workflow_dispatch: {}
 jobs:
   nudge:
-    runs-on: ubuntu-latest
+    # A fixed machine version, so a change to GitHub's default ("latest") image can never break this job.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
     steps:
       - name: Ask Spal to check reminders
         env:
@@ -17,8 +19,9 @@ jobs:
             echo "CRON_SECRET is not set in GitHub. Add it under Settings > Secrets and variables > Actions."
             exit 1
           fi
+          # Retry a few times if the network hiccups, so one blip does not fail the job.
           code=$(curl -sS -o response.txt -w "%{http_code}" -X POST "https://spal-biz.vercel.app/api/cron/nudges" \
-            -H "Authorization: Bearer $CRON_SECRET" --max-time 60) || { echo "Could not reach the app."; exit 1; }
+            -H "Authorization: Bearer $CRON_SECRET" --max-time 60 --retry 3 --retry-delay 5 --retry-all-errors) || { echo "Could not reach the app."; curl --version | head -1; exit 1; }
           echo "HTTP $code"
           cat response.txt; echo
           case "$code" in
