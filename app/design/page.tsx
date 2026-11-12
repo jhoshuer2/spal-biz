@@ -7,6 +7,7 @@ import { DayDetail, type Row } from "@/components/app/DaySheet";
 import { EditEntry } from "@/components/app/EditEntry";
 import { SetPassword } from "@/components/app/SetPassword";
 import { SaveAccount } from "@/components/app/SaveAccount";
+import { ProfileReminders } from "@/components/app/Reminders";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Mood = "strong" | "normal" | "slow" | "evening";
@@ -224,6 +225,12 @@ export default function DesignPage() {
       <Section title="Account sheets"><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Button kind="secondary" onClick={() => setPwOpen(true)}>Open the password sheet</Button><Button kind="secondary" onClick={() => setSigninOpen(true)}>Open the sign-in sheet</Button></div></Section>
       <SaveAccount open={signinOpen} onClose={() => setSigninOpen(false)} sb={STUB} mode="signin" />
       <SetPassword open={pwOpen} onClose={() => setPwOpen(false)} sb={STUB} email="amaka@example.com" />
+
+      <Section title="Reminders row, when the phone cannot do them">
+        <Surface><div style={{ maxWidth: 430 }}>
+          <ProfileReminders r={{ configured: true, supported: false, on: false, blocked: false, busy: false, note: null, iosNeedsInstall: false, turnOn: async () => false, turnOff: async () => {}, sendTest: async () => {}, askable: false }} />
+        </div></Surface>
+      </Section>
 
       <Sheet open={sheet} onClose={() => setSheet(false)} title="Theme">
         <h3 className="head" style={{ fontSize: 24, margin: "0 0 12px" }}>Theme</h3>

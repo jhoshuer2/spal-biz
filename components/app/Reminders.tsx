@@ -41,7 +41,7 @@ export function useReminders(sb: SupabaseClient, shopId: string, getToken: () =>
     } catch { setNote("I couldn't send it. Please try again."); }
     setBusy(false);
   }
-  return { supported, on, blocked, busy, note, iosNeedsInstall, turnOn, turnOff, sendTest, askable: supported && !on && !blocked };
+  return { configured: pushConfigured, supported, on, blocked, busy, note, iosNeedsInstall, turnOn, turnOff, sendTest, askable: supported && !on && !blocked };
 }
 
 /** Shown once, after she has closed a day and so knows what Spal is for. Quiet if she says no. */
@@ -77,7 +77,7 @@ export function ReminderPrompt({ r }: { r: ReturnType<typeof useReminders> }) {
 export function ProfileReminders({ r }: { r: ReturnType<typeof useReminders> }) {
   const inst = useInstall();
   const showInstall = inst.canInstall || inst.iosSteps;
-  if (!showInstall && !r.supported && !r.iosNeedsInstall) return null;
+  if (!r.configured && !showInstall) return null;
   return (
     <>
       {showInstall && (
@@ -88,6 +88,16 @@ export function ProfileReminders({ r }: { r: ReturnType<typeof useReminders> }) 
           ) : (
             <p className="label" style={{ margin: "4px 0 0", fontSize: 16 }}>Tap Share, then Add to Home Screen, to open Spal like an app.</p>
           )}
+        </>
+      )}
+      {r.configured && !r.supported && (
+        <>
+          <p className="label" style={{ margin: "16px 0 4px" }}>Reminders</p>
+          <p className="label" style={{ margin: "4px 0 0", fontSize: 16 }}>
+            {r.iosNeedsInstall
+              ? "On iPhone, reminders need Spal on your Home Screen. Tap Share, then Add to Home Screen, and open Spal from there."
+              : "This browser can't show reminders. Open Spal in Chrome (not inside WhatsApp or another app), or add it to your home screen."}
+          </p>
         </>
       )}
       {r.supported && (
