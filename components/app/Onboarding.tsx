@@ -31,9 +31,9 @@ export function Onboarding({ onDone, error, busy }: { onDone: (a: Answers) => vo
 
   const first = a.name.trim().split(/\s+/)[0];
   const steps = [
-    { q: "Hi, I'm Spal. What should I call you?", ph: "Amaka", key: "name" as const },
-    { q: `Nice to meet you, ${first}. What do you sell?`, ph: "Provisions", key: "sells" as const },
-    { q: "And what is your shop called?", ph: "Amaka Stores", key: "shop" as const },
+    { q: "Hi, I'm Spal. What should I call you?", ph: "Your name", key: "name" as const },
+    { q: `Nice to meet you, ${first}. What do you sell?`, ph: "What you sell", key: "sells" as const },
+    { q: "And what is your shop called?", ph: "Your shop's name", key: "shop" as const },
   ];
   const cur = steps[step];
   const value = a[cur.key];

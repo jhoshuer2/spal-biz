@@ -105,10 +105,10 @@ function Form({ row, sb, shopId, custNames, itemNames, onClose, onChanged }: {
             <button role="radio" aria-checked={credit} onClick={() => setCredit(true)}>On credit</button>
           </div>
         )}
-        {showWhat && <TextField label={row.kind === "expense" ? "What was it for?" : "What"} value={what} onChange={setWhat} placeholder="Pepper soup" />}
+        {showWhat && <TextField label={row.kind === "expense" ? "What was it for?" : "What"} value={what} onChange={setWhat} placeholder="What it was" />}
         {showQty && <TextField label="How many" value={qty} onChange={(v) => setQty(digits(v))} placeholder="1" />}
-        {showAmount && <TextField label={isSale && qty && Number(qty) > 1 ? "Total amount (₦, for all of them)" : "Amount (₦)"} value={amount} onChange={(v) => setAmount(digits(v))} placeholder="5000" />}
-        {showWho && <TextField label={credit ? "Who owes you" : row.kind === "payment_received" ? "Who paid" : "Customer (optional)"} value={who} onChange={setWho} placeholder="Blessing" />}
+        {showAmount && <TextField label={isSale && qty && Number(qty) > 1 ? "Total amount (₦, for all of them)" : "Amount (₦)"} value={amount} onChange={(v) => setAmount(digits(v))} placeholder="Amount" />}
+        {showWho && <TextField label={credit ? "Who owes you" : row.kind === "payment_received" ? "Who paid" : "Customer (optional)"} value={who} onChange={setWho} placeholder="Their name" />}
         {isSale && credit && (
           <div className="field">
             <label className="label" htmlFor="due">Pays on (optional)</label>

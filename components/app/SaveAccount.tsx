@@ -103,7 +103,7 @@ export function SaveAccount({ open, onClose, sb, mode = "save", ownerFirst }: { 
       {step === "email" && (
         <>
           <h2 className="head" style={{ fontSize: 28, margin: "0 0 16px" }}>{mode === "save" ? "What's your email?" : "Sign in with your email"}</h2>
-          <TextField value={email} onChange={setEmail} onSubmit={() => sendEmail()} placeholder="amaka@example.com" autoFocus />
+          <TextField value={email} onChange={setEmail} onSubmit={() => sendEmail()} placeholder="Your email" autoFocus />
           {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
           <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
             {mode === "signin" ? (

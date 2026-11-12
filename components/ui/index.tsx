@@ -116,7 +116,7 @@ export function ProposalCard({ title, draft, onYes, onChange, onLater }: { title
       <div style={{ background: "var(--surface-2)", borderRadius: 16, padding: "14px 16px", marginTop: 8, color: "var(--ink)" }}>{draft}</div>
       {sent ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16, minHeight: 56, color: "var(--good-text)", fontWeight: 600 }}>
-          <Icon name="check" size={22} /> Sent to Blessing
+          <Icon name="check" size={22} /> Sent
         </div>
       ) : (
         <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
