@@ -29,12 +29,14 @@ async function fetchToken(): Promise<string | undefined> {
     document.body.appendChild(el);
     let id = "";
     const done = () => { try { if (id) window.turnstile?.remove(id); } catch {} el.remove(); };
-    const t = setTimeout(() => { done(); reject(new Error("captcha timeout")); }, 25_000);
+    const t = setTimeout(() => { done(); reject(new Error("captcha timeout")); }, 45_000);
     id = window.turnstile!.render(el, {
       sitekey: KEY,
       appearance: "interaction-only",
+      retry: "auto",
+      "refresh-expired": "auto",
       callback: (token: string) => { clearTimeout(t); done(); resolve(token); },
-      "error-callback": () => { clearTimeout(t); done(); reject(new Error("captcha error")); },
+      "error-callback": (code?: string | number) => { clearTimeout(t); done(); reject(new Error(`captcha error ${code ?? ""}`.trim())); },
     });
   });
 }

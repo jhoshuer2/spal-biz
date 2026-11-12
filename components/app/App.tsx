@@ -75,27 +75,63 @@ export function App() {
     return () => window.removeEventListener("online", back);
   }, [load]);
 
+  type Why = "rate" | "captcha" | "network" | "other";
+  const classify = (e: unknown): Why => {
+    const x = e as { status?: number; code?: string; message?: string } | null;
+    const text = `${x?.message ?? ""} ${x?.code ?? ""}`;
+    if (x?.status === 429 || /rate.?limit|over_request|too many|over_.*_rate/i.test(text)) return "rate";
+    if (/captcha/i.test(text)) return "captcha";
+    if (navigator.onLine === false || /failed to fetch|networkerror|network request|load failed|fetch failed|timeout|chunk/i.test(text)) return "network";
+    return "other";
+  };
+  const WHY: Record<Why, string> = {
+    rate: "A lot of people are signing up right now. Please wait a few minutes and try again.",
+    captcha: "I couldn't check that you're a real person. Please try again.",
+    network: "I can't connect. Please check your data or Wi-Fi and try again.",
+    other: "I couldn't get started just now. Please try again.",
+  };
+  /** Tell the person running Spal why someone could not get started. They have no account yet, so this goes through a small open door. */
+  const diag = (stage: string, why: Why, e: unknown, attempt: number) => {
+    const x = e as { status?: number; code?: string; message?: string } | null;
+    const conn = (navigator as unknown as { connection?: { effectiveType?: string } }).connection;
+    fetch("/api/diag", { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
+      body: JSON.stringify({ stage, why, status: x?.status, code: x?.code, detail: x?.message, online: navigator.onLine, attempt, network: conn?.effectiveType, commit: process.env.NEXT_PUBLIC_COMMIT }) }).catch(() => {});
+  };
+
   async function create(a: { name: string; sells: string; shop: string }) {
     setBusy(true);
     setError(null);
     let sb;
     try {
       sb = await sbClient();
-      const { data: { session } } = await sb.auth.getSession();
-      if (!session) {
-        const { getCaptchaToken } = await import("@/lib/captcha");
-        const captchaToken = await getCaptchaToken();
-        const { error: ae } = await sb.auth.signInAnonymously(captchaToken ? { options: { captchaToken } } : undefined);
-        if (ae) throw ae;
-      }
-    } catch {
-      setBusy(false);
-      setError("I couldn't get started just now. Please try again.");
+    } catch (e) {
+      setBusy(false); setError(WHY[classify(e)]); diag("signup-load", classify(e), e, 1);
       return;
     }
+    // Make the private account. A flaky connection or a slow captcha is retried once on its own, with a fresh check.
+    let lastErr: unknown = null, why: Why = "other";
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session) {
+          const { getCaptchaToken } = await import("@/lib/captcha");
+          const captchaToken = await getCaptchaToken();
+          const { error: ae } = await sb.auth.signInAnonymously(captchaToken ? { options: { captchaToken } } : undefined);
+          if (ae) throw ae;
+        }
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e; why = classify(e);
+        diag(String((e as Error)?.message ?? "").toLowerCase().includes("captcha") ? "signup-captcha" : "signup-account", why, e, attempt);
+        if (why === "rate" || attempt === 2) break;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+    if (lastErr) { setBusy(false); setError(WHY[why]); return; }
     const { data, error: e } = await sb.from("shop").insert({ owner_name: a.name, sells: a.sells, name: a.shop }).select("*").single();
     setBusy(false);
-    if (e || !data) { setError("I couldn't save that. Please try again."); return; }
+    if (e || !data) { diag("signup-shop", classify(e), e, 1); setError("I couldn't save that. Please try again."); return; }
     setView({ kind: "today", shop: data as Shop });
   }
 
