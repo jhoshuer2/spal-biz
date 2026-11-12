@@ -20,7 +20,7 @@ Steps 1 to 5 of the build sequence are done and live at https://spal-biz.vercel.
 - **Database and auth:** Supabase. Every owner gets a private account silently (anonymous sign-in); she turns it into a real account with email (link or code) and can add a password. Row-level security means a shop can only ever read and write its own rows.
 - **Understanding notes:** Claude API (`claude-opus-5-5`, low effort, structured output with a plain-JSON retry). The model reads the note plus her recent records and returns a list of add, update or delete actions. **Code does all the money arithmetic**: the model gives a total, or a unit price and a quantity, and the server multiplies. Every update or delete keeps a copy so it can be undone.
 - **Voice:** recorded in the browser, turned into text by ElevenLabs Scribe (English mode, which suits Nigerian English and Pidgin). The audio is kept with the note.
-- **Reminders:** Web Push (VAPID keys). A GitHub Actions job calls `/api/cron/nudges` every 10 minutes. That route decides, per shop, whether Spal has anything worth saying.
+- **Reminders:** Web Push (VAPID keys). A Supabase `pg_cron` job (see `supabase/scheduler.sql`) calls `/api/cron/nudges` every 10 minutes, so reminders need no GitHub or other paid service. That route decides, per shop, whether Spal has anything worth saying.
 - **Protection:** Cloudflare Turnstile on sign-up, daily per-account caps (150 notes, 100 recordings) counted in the database, input length limits.
 - **Offline:** a service worker lets the app open with no signal. Notes and recordings made offline wait in the phone's IndexedDB and are sent in order when signal returns, stamped with the time she really said them.
 - **Fonts:** Neue Haas Grotesk Display for headlines (Inter Tight stands in until Joshua supplies licensed files), Source Sans 3 for text and numbers.
@@ -80,7 +80,7 @@ The migrations, in order: `init`, `shop_theme`, `usage_limits`, `avatar`, `push`
 Environment variables in Vercel (only names here, never values):
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, `ADMIN_EMAIL`, `NEXT_PUBLIC_CONTACT_EMAIL`. Optional: `ANTHROPIC_MODEL` (for example `claude-haiku-5-5` to cut cost), `NEXT_PUBLIC_GOOGLE_SIGNIN=1`.
 
-Also: the `CRON_SECRET` repository secret in GitHub, Supabase email (own SMTP, site URL and redirect), the Turnstile secret in Supabase, and all migrations run. `/api/health` reports which keys reached the deploy.
+Also: run `supabase/scheduler.sql` once (it needs the same `CRON_SECRET`), Supabase email (own SMTP, site URL and redirect), the Turnstile secret in Supabase, and all migrations run. `/api/health` reports which keys reached the deploy.
 
 ## 7. What is not built yet
 

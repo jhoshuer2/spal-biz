@@ -1,13 +1,10 @@
-name: Spal reminders
-# Wakes the app every 10 minutes so it can check whether anyone is due a reminder.
-# Needs one repository secret: CRON_SECRET (the same value as in Vercel).
+name: Spal reminders (manual test only)
+# The every-10-minutes timer now lives in Supabase (pg_cron), see supabase/scheduler.sql, so reminders do not depend on GitHub billing.
+# This job stays only as a button: Actions > "Spal reminders (manual test only)" > Run workflow, to check the app answers.
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch: {}
 jobs:
   nudge:
-    # A fixed machine version, so a change to GitHub's default ("latest") image can never break this job.
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
@@ -15,19 +12,8 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "CRON_SECRET is not set in GitHub. Add it under Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-          # Retry a few times if the network hiccups, so one blip does not fail the job.
-          code=$(curl -sS -o response.txt -w "%{http_code}" -X POST "https://spal-biz.vercel.app/api/cron/nudges" \
-            -H "Authorization: Bearer $CRON_SECRET" --max-time 60 --retry 3 --retry-delay 5 --retry-all-errors) || { echo "Could not reach the app."; curl --version | head -1; exit 1; }
-          echo "HTTP $code"
-          cat response.txt; echo
-          case "$code" in
-            2*) exit 0 ;;
-            401) echo "The secret in GitHub does not match CRON_SECRET in Vercel." ;;
-            503) echo "The app is missing a setting in Vercel: CRON_SECRET, SUPABASE_SERVICE_ROLE_KEY, or the push keys." ;;
-            *) echo "The app answered with an error. See the response above." ;;
-          esac
+          if [ -z "$CRON_SECRET" ]; then echo "CRON_SECRET is not set in GitHub."; exit 1; fi
+          code=$(curl -sS -o response.txt -w "%{http_code}" -X POST "https://spal-biz.vercel.app/api/cron/nudges" -H "Authorization: Bearer $CRON_SECRET" --max-time 60 --retry 3 --retry-delay 5 --retry-all-errors) || { echo "Could not reach the app."; exit 1; }
+          echo "HTTP $code"; cat response.txt; echo
+          case "$code" in 2*) exit 0 ;; 401) echo "The secret in GitHub does not match CRON_SECRET in Vercel." ;; 503) echo "The app is missing a setting in Vercel." ;; esac
           exit 1
