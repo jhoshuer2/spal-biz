@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { keyIsWrong, keyKind } from "@/lib/keyKind";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ export async function GET(req: Request) {
   const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const admin = process.env.ADMIN_EMAIL?.trim().toLowerCase(), svc = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!admin || !svc) return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  if (keyIsWrong(keyKind(svc))) return NextResponse.json({ error: "wrong_service_key", kind: keyKind(svc) }, { status: 503 });
   if (!token) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const asUser = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });

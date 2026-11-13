@@ -25,7 +25,7 @@ export default function Admin() {
       if (!session) { setMsg("Sign in to Spal first, then come back to this page."); return; }
       const r = await fetch("/api/admin/summary", { headers: { Authorization: `Bearer ${session.access_token}` } });
       if (r.status === 403) { setMsg("This page is only for the person running Spal."); return; }
-      if (r.status === 503) { setMsg("Not set up yet: add ADMIN_EMAIL and SUPABASE_SERVICE_ROLE_KEY in Vercel."); return; }
+      if (r.status === 503) { const j = await r.json().catch(() => ({})); setMsg(j.error === "wrong_service_key" ? `SUPABASE_SERVICE_ROLE_KEY in Vercel is the wrong key (${j.kind}). In Supabase go to Settings, API Keys, and copy the service_role (secret) key, then redeploy.` : "Not set up yet: add ADMIN_EMAIL and SUPABASE_SERVICE_ROLE_KEY in Vercel."); return; }
       if (!r.ok) { setMsg("Couldn't load."); return; }
       setData(await r.json());
     })();

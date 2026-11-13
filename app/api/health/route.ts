@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { keyKind } from "@/lib/keyKind";
 
 // Which services are configured in this deploy. Never returns any values, only yes or no.
 export function GET() {
@@ -9,6 +10,7 @@ export function GET() {
     voiceConfigured: Boolean(process.env.ELEVENLABS_API_KEY),
     pushConfigured: Boolean(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
     remindersScheduleConfigured: Boolean(process.env.CRON_SECRET && process.env.SUPABASE_SERVICE_ROLE_KEY),
+    serviceKey: keyKind(process.env.SUPABASE_SERVICE_ROLE_KEY),
     captchaConfigured: Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY),
   });
 }

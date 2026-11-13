@@ -3,6 +3,7 @@ import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { decideNudges, lagosNow, type NudgeKind } from "@/lib/nudges";
 import { lapsedRegulars, type Visit } from "@/lib/regulars";
+import { keyIsWrong, keyKind } from "@/lib/keyKind";
 import { pushReady, sendPush } from "@/lib/webpush";
 
 export const runtime = "nodejs";
@@ -19,6 +20,7 @@ const minutesOf = (t: string | null) => { const m = /^(\d{1,2}):(\d{2})/.exec(t 
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET, svc = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!secret || !svc || !pushReady()) return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  if (keyIsWrong(keyKind(svc))) return NextResponse.json({ error: "wrong_service_key", kind: keyKind(svc) }, { status: 503 });
   const given = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
   if (!same(given, secret)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 

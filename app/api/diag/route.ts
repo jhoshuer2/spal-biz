@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { keyIsWrong, keyKind } from "@/lib/keyKind";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ const hits = new Map<string, number[]>();
  */
 export async function POST(req: Request) {
   const svc = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!svc) return NextResponse.json({ ok: false }, { status: 503 });
+  if (!svc || keyIsWrong(keyKind(svc))) return NextResponse.json({ ok: false }, { status: 503 });
   const origin = req.headers.get("origin") ?? "";
   if (origin && !/spal-biz\.vercel\.app$|spal\.ng$|localhost/.test(new URL(origin).hostname)) return NextResponse.json({ ok: false }, { status: 403 });
 
@@ -28,11 +29,12 @@ export async function POST(req: Request) {
   const clip = (v: unknown, n = 200) => (typeof v === "string" ? v.slice(0, n) : typeof v === "number" ? v : null);
 
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, svc, { auth: { persistSession: false, autoRefreshToken: false } });
-  await sb.from("app_report").insert({
+  const { error: insErr } = await sb.from("app_report").insert({
     kind: "error",
     message: `Could not get started: ${b.stage} (${clip(b.why, 20) ?? "unknown"})`,
     context: { commit: clip(b.commit, 12), status: clip(b.status), code: clip(b.code, 80), detail: clip(b.detail), online: b.online === true, attempt: clip(b.attempt, 3), network: clip(b.network, 30) },
     user_agent: (req.headers.get("user-agent") ?? "").slice(0, 200),
   });
+  if (insErr) { console.error("diag insert failed", insErr.message); return NextResponse.json({ ok: false }, { status: 500 }); }
   return NextResponse.json({ ok: true });
 }
