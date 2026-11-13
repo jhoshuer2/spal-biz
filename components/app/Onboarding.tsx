@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type ComponentType } from "react";
-import { Button, Orb, Sheet, TextField } from "@/components/ui";
+import { Button, Logo, Orb, Sheet, TextField } from "@/components/ui";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Answers = { name: string; sells: string; shop: string };
@@ -48,6 +48,7 @@ export function Onboarding({ onDone, error, busy }: { onDone: (a: Answers) => vo
   return (
     <main className="boot-new" data-mood="normal" style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", background: "var(--bg)" }}>
       <div className="mood-field" style={{ padding: "40px 24px 8px" }}>
+        <div style={{ marginBottom: 8 }}><Logo size={36} /></div>
         <div style={{ display: "grid", placeItems: "center", paddingBottom: 12 }}>
           <Orb tone="lilac" size={150} state={busy ? "thinking" : "idle"} />
         </div>

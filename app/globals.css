@@ -43,6 +43,8 @@
   color-scheme: light;
 }
 
+:root { --logo-you: #0e1116; --logo-spal: #9bc11a; }
+:root[data-theme="dark"] { --logo-you: #f4efe3; --logo-spal: #c9f23c; }
 :root[data-theme="dark"] {
   --bg: #0b0c10;
   --surface: #15171d;
@@ -69,6 +71,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) { --logo-you: #f4efe3; --logo-spal: #c9f23c; }
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
     --bg: #0b0c10;
     --surface: #15171d;

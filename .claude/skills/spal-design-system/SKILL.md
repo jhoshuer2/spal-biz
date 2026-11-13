@@ -9,7 +9,7 @@ Read `PRODUCT.md` first. This file says how Spal looks and moves. It never overr
 
 **The bar:** Apple and Airbnb level. Few things, each one exact. If a screen needs explaining, it is wrong. If something can be removed without losing meaning, remove it.
 
-**Joshua art directs.** Do not invent a new look. The tokens, fonts (Playfair Display headlines, Inter text and numerals), mood colours, orb and components below were reviewed live at `/design` and **approved by Joshua on 2026-11-11**. Treat them as locked; change one only when Joshua asks, and update this file in the same change.
+**Joshua art directs.** Do not invent a new look. The tokens, fonts (Neue Haas Grotesk Display headlines with Inter Tight standing in until licensed, Source Sans 3 text and numerals), mood colours, orb and components below were reviewed live at `/design` and **approved by Joshua on 2026-11-11**. Treat them as locked; change one only when Joshua asks, and update this file in the same change.
 
 References live in `design/references/` (numbered, with what to take from each in the table at the end). Look at them before building. Take the principle, never copy a screen.
 
@@ -192,6 +192,18 @@ Done means: it works in both themes, passes contrast, holds frame rate on a slow
 
 Contact sheets (10 to 15) are stills pulled from video references; the motion itself is described in section 4.
 
-## 10. Keeping this file true
+## 10. The logo
+
+Approved by Joshua on 2026-11-13: **Dialogue**. Two voices. A small circle with a square corner (her) and a larger one (Spal) overlap, and the overlap is left empty. It says the product in one shape: she speaks, Spal answers.
+
+- Files: `public/logo/` (`spal-mark-*.svg`, `spal-lockup-*.svg`), app icons in `public/icons/`, `app/icon.svg`. In code use `<Logo />` from `components/ui`, which follows light, dark and auto.
+- Colours: her bubble ink (`#0E1116`) on light and ivory (`#F4EFE3`) on dark; Spal's bubble lime `#C9F23C` on dark and lime ground-adjusted `#9BC11A` on light (pure lime on white fails contrast). On a lime ground use ink for both.
+- The overlap is empty, never filled. Never recolour, rotate, outline, add shadows, or put the mark in a container other than the app-icon square.
+- The wordmark is lowercase "spal" in Bricolage Grotesque 800, outlined in the lockup SVGs. Lockup: mark height equals the full height, x-height about 46% of it.
+- Under 32px (notification badge, tiny favicons) use two solid circles, as in `public/icons/badge-96.png`.
+- Clear space: half the mark's width on every side. Minimum size: 20px for the mark, 80px wide for the lockup.
+- Merch: the mark alone on chests and pins, the lockup on bags and boxes, the repeating mark as pattern on wrapping and tape (lime ground with ink, or night ground with ivory and lime). Source sheets: `design/logo/explore-3.png`, `explore-4.png`.
+
+## 11. Keeping this file true
 
 When Joshua changes a token, a component, or a rule, edit this file in the same change. When a real screen reveals a missing component, add it here with its rules before using it twice.
