@@ -17,13 +17,13 @@ const SCHEMA = {
       type: "array",
       items: {
         type: "object", additionalProperties: false,
-        required: ["op", "target", "kind", "amount_naira", "unit_price_naira", "quantity", "item", "customer", "due_date", "note", "occurred_on", "confidence"],
+        required: ["op", "target", "kind", "amount_naira", "unit_price_naira", "quantity", "item", "customer", "due_date", "note", "occurred_on", "occurred_time", "confidence"],
         properties: {
           op: { type: "string", enum: ["add", "update", "delete"] },
           target: nullable("string"),
           kind: { type: "string", enum: [...KINDS, "none"] },
           amount_naira: nullable("number"), unit_price_naira: nullable("number"), quantity: nullable("number"),
-          item: nullable("string"), customer: nullable("string"), due_date: nullable("string"), note: nullable("string"), occurred_on: nullable("string"),
+          item: nullable("string"), customer: nullable("string"), due_date: nullable("string"), note: nullable("string"), occurred_on: nullable("string"), occurred_time: nullable("string"),
           confidence: { type: "number" },
         },
       },
@@ -52,7 +52,8 @@ Rules:
 - One total for several different items: one sale with that total, no item, and the items listed in note ("2 milk, 1 sugar"). A separate price for each item: one record per item.
 - For an expense, note is what it was for, as a short noun phrase ("fuel", "transport"), never a sentence.
 - customer: if she means someone in the known customers list, use that exact name. Otherwise the name as she said it. Null if nobody is named.
-- If she is telling you about an earlier day ("yesterday", "last Tuesday", a date), set occurred_on (YYYY-MM-DD) on added records. Otherwise null.
+- Dates and times are part of what she says, so listen for them like a person would. If she says when something happened ("at 6:30", "around 4", "4:05 this afternoon", "an hour ago", "after church", "before 9"), set occurred_time (HH:MM, 24 hours, Lagos) on that record. Work out am or pm from the kind of shop and the time of her note: a shop sells in the day, so "6:30" told at 7:12 in the evening is 18:30, never a time after her note was recorded. Work out "an hour ago" and "just now" from the time her note was recorded. Different times for different sales mean separate records, each with its own occurred_time ("apple juice 500 at 4:05 and 2,000 at 6:30" is two sales). A time that covers several things ("this morning I sold ...") with no exact hour: leave occurred_time null. If she gives no time at all, occurred_time is null and the system uses the moment she told you, so never invent one. You may also set occurred_time on an update when she corrects when something happened ("that was at 5, not 6").
+- If she is telling you about an earlier day ("yesterday", "last Tuesday", a date), set occurred_on (YYYY-MM-DD) on added records. Otherwise null. With a time and no day, the day is the day of her note.
 - Ask at most ONE short friendly question (under 15 words, in her own style) when you cannot tell the amount, which record she means, or anything above. You may return actions and a question together when part of her note is clear. If her note is not about the shop at all, return no actions and ask what she meant.
 - confidence is 0 to 1: how sure you are you read it right.`;
 
@@ -99,7 +100,7 @@ export async function POST(req: Request) {
   const { text: recordsText, byRef } = recordsList((recentRaw ?? []) as EventRow[], custName, itemName);
 
   const userMsg = [
-    `Today is ${lagosToday()} (Lagos time).`,
+    `Today is ${lagosToday()} (Lagos time). Her note was recorded at ${new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Lagos" }).format(new Date(capture.created_at as string))}.`,
     `Shop: ${shop?.name ?? "unknown"}; she sells: ${shop?.sells ?? "unknown"}.`,
     `Known customers: ${(customers ?? []).map((c) => c.name).join(", ") || "none yet"}.`,
     `Known items: ${(items ?? []).map((i) => i.name).join(", ") || "none yet"}.`,

@@ -73,3 +73,17 @@ export function noonLagos(day: string | null, now = new Date()): string | null {
   if (Number.isNaN(t.getTime()) || t.getTime() > now.getTime() + 24 * 3600 * 1000 || t.getTime() < now.getTime() - 400 * 24 * 3600 * 1000) return null;
   return t.toISOString();
 }
+
+const lagosDay = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+/** "6:30 pm" in Lagos, for saying a time back to her. */
+export const clockLagos = (iso: string) => new Intl.DateTimeFormat("en-GB", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Africa/Lagos" }).format(new Date(iso)).replace(/\s/g, " ");
+
+/** The moment she said it happened. `time` is HH:MM, 24 hours, Lagos. `day` is YYYY-MM-DD; without it the day of `base` (when she told Spal, or the record being fixed) is used. null if unusable or still in the future. */
+export function whenLagos(day: string | null, time: string | null, base: string | Date, now = new Date()): string | null {
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec((time ?? "").trim());
+  if (!m) return null;
+  const d = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : lagosDay(new Date(base).toISOString());
+  const t = new Date(`${d}T${m[1].padStart(2, "0")}:${m[2]}:00+01:00`); // Lagos is UTC+1 all year
+  if (Number.isNaN(t.getTime()) || t.getTime() > now.getTime() + 10 * 60_000 || t.getTime() < now.getTime() - 400 * 24 * 3600 * 1000) return null;
+  return t.toISOString();
+}

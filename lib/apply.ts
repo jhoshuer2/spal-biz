@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { naira } from "./format";
-import { actionKobo, changedFields, describe, describeRow, noonLagos, rescaleKobo, type EventRow } from "./records";
+import { actionKobo, changedFields, clockLagos, describe, describeRow, noonLagos, rescaleKobo, whenLagos, type EventRow } from "./records";
 
 export const KINDS = ["sale", "expense", "credit_sale", "payment_received", "stock_note", "day_total"] as const;
 export type Kind = (typeof KINDS)[number];
@@ -8,7 +8,7 @@ export type Kind = (typeof KINDS)[number];
 export type Action = {
   op: "add" | "update" | "delete"; target: string | null; kind: Kind | "none" | null;
   amount_naira: number | null; unit_price_naira: number | null; quantity: number | null;
-  item: string | null; customer: string | null; due_date: string | null; note: string | null; occurred_on: string | null; confidence: number;
+  item: string | null; customer: string | null; due_date: string | null; note: string | null; occurred_on: string | null; occurred_time?: string | null; confidence: number;
 };
 export type Parsed = { actions: Action[]; question: string | null };
 
@@ -51,7 +51,8 @@ export async function applyActions(ctx: Ctx, actions: Action[]) {
       if (a.kind === "credit_sale" && !customer) continue; // a debt with no name cannot be tracked; the question asks who
       const customer_id = await resolve("customer", custIndex, custName, customer);
       const item_id = await resolve("item", itemIndex, itemName, item);
-      const when = noonLagos(a.occurred_on);
+      const exact = whenLagos(a.occurred_on, a.occurred_time ?? null, capturedAt ?? new Date());
+      const when = exact ?? noonLagos(a.occurred_on);
       const row = {
         shop_id: shopId, capture_id: captureId, kind: a.kind, amount_kobo: kobo, customer_id, item_id,
         quantity: a.quantity != null && a.quantity > 0 ? a.quantity : null,
@@ -63,7 +64,7 @@ export async function applyActions(ctx: Ctx, actions: Action[]) {
       if (error) { console.error("add failed", error.message); missed++; continue; }
       wrote++;
       if (customer_id) { touchedCustomers.push(customer_id); if (a.kind === "sale" || a.kind === "credit_sale") boughtCustomers.push(customer_id); }
-      lines.push(describe({ kind: a.kind, amount_kobo: kobo, customer, item, quantity: row.quantity, note: row.note, due: row.due_date }));
+      lines.push(describe({ kind: a.kind, amount_kobo: kobo, customer, item, quantity: row.quantity, note: row.note, due: row.due_date }) + (exact ? ` at ${clockLagos(exact)}` : ""));
       continue;
     }
 
@@ -95,6 +96,8 @@ export async function applyActions(ctx: Ctx, actions: Action[]) {
     if (clean(a.item)) patch.item_id = await resolve("item", itemIndex, itemName, clean(a.item));
     if (clean(a.note)) patch.note = clean(a.note);
     if (isDate(a.due_date)) patch.due_date = a.due_date;
+    const moved = whenLagos(a.occurred_on, a.occurred_time ?? null, before.occurred_at) ?? (isDate(a.occurred_on) ? noonLagos(a.occurred_on) : null);
+    if (moved) patch.occurred_at = moved;
     const diff = changedFields(before as unknown as Record<string, unknown>, patch as Record<string, unknown>) as Partial<EventRow>;
     const finalKind = diff.kind ?? before.kind;
     if (finalKind === "credit_sale" && !(diff.customer_id ?? before.customer_id)) { missed++; continue; } // a debt needs a name
@@ -109,7 +112,7 @@ export async function applyActions(ctx: Ctx, actions: Action[]) {
     wrote++; changed = true;
     if (after.customer_id) touchedCustomers.push(after.customer_id);
     const was = before.amount_kobo != null && diff.amount_kobo != null ? ` (was ${naira(before.amount_kobo)})` : "";
-    lines.push(`Updated: ${describeRow(after, custName, itemName)}${was}`);
+    lines.push(`Updated: ${describeRow(after, custName, itemName)}${was}${diff.occurred_at ? ` at ${clockLagos(diff.occurred_at)}` : ""}`);
   }
 
   return { lines, changed, wrote, missed, touchedCustomers, boughtCustomers, historyFailed };
