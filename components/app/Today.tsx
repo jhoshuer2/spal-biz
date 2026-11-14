@@ -11,7 +11,8 @@ import type { Shop } from "@/lib/supabase";
 import { supabaseBrowser } from "@/lib/supabase";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { micMessage, transcribe, useVoice } from "@/lib/voice";
-import { bumpNotes, cueFor, introDone, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
+import { Chat } from "./Chat";
+import { bumpNotes, cueFor, introDone, setupSpeech, speakWhenAllowed, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
 import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
@@ -24,6 +25,7 @@ import { DaySheet, type Tab } from "./DaySheet";
 import { CardStack, type CardId, type StackCard } from "./Cards";
 import { ProfileReminders, ReminderPrompt, useReminders } from "./Reminders";
 
+let greeted = false; // once per page load
 const greeting = (h: number) => (h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening");
 const DEFAULT_CLOSE_MIN = 18 * 60; // until Spal has learned her habit
 
@@ -37,6 +39,8 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const [place, setPlace] = useState<Place>("today");
   const [talk, setTalk] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [intro, setIntro] = useState(false);
   const [speaksOn, setSpeaksOn] = useState(false);
   const [voiceTest, setVoiceTest] = useState<"" | "playing" | "silent" | "ok">("");
@@ -118,6 +122,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     setItemNames(new Map((items ?? []).map((i) => [i.id as string, i.name as string])));
     setCustNames(names);
     setCloses((dc ?? []) as Close[]);
+    setLoaded(true);
 
     // Spal's first offer to act: a debt that is due. One at a time, never the same person twice in a day.
     const todayK = dayKey(new Date());
@@ -235,6 +240,20 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const lastClose = closes.find((c) => c.day < todayKey);
   const evening = hour * 60 + now.getMinutes() >= closeMin;
   const mood = evening ? "evening" : "normal";
+
+  // Spal speaks first: a greeting once each time the app is opened. If the phone blocks sound until a tap, it waits for her first touch.
+  useEffect(() => { setupSpeech(getToken, (what, ctx) => { reportError(sb, shop.id, what, ctx, navigator.userAgent); }); }, [getToken, sb, shop.id]);
+  useEffect(() => {
+    if (!loaded || greeted || !speakOn()) return;
+    greeted = true;
+    const g = `${greeting(hour)}, ${first}.`;
+    const line = evening && !closedToday ? `${g} How did sales go today?`
+      : hasToday && sales > 0 ? `${g} You've sold ${naira(sales)} so far today.`
+      : isNewOwner() ? `${g} How was your day? Tap the green button to tell me, or tap Chat with Spal to ask me anything.`
+      : lastClose?.total_kobo ? `${g} Yesterday was ${naira(lastClose.total_kobo)}. Let's beat it today.`
+      : `${g} How's business today?`;
+    speakWhenAllowed(line);
+  }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function send(text: string, context?: string, voiceBlob?: Blob) {
     const t = text.trim();
@@ -443,6 +462,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
                   <div className="coach-actions">
                     <Button kind="secondary" small onClick={() => { setTalkMode("text"); setTalk(true); }}>Type instead</Button>
                     <Button kind="secondary" small onClick={pickPhoto}>Add a photo</Button>
+                    <Button kind="secondary" small onClick={() => { stopSpeaking(); setChatOpen(true); }}>Chat with Spal</Button>
                   </div>
                 </>
               )}
@@ -575,6 +595,8 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
         </div>
       </Sheet>
       <input ref={photoInput} type="file" accept="image/*" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} onChange={(e) => { addPhoto(e.target.files?.[0]); e.target.value = ""; }} />
+
+      <Chat open={chatOpen} onClose={() => setChatOpen(false)} getToken={getToken} first={first} />
 
       <Sheet open={owedOpen} onClose={() => setOwedOpen(false)} title="Owed to you">
         <h2 className="head" style={{ fontSize: 26, margin: "0 0 4px" }}>Owed to you</h2>

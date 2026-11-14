@@ -218,7 +218,8 @@ Most owners are not technical. Spal always says what is happening and what to do
 
 - **Coach text** (`.coach`, over the aura): "How was your day? Tap the big green button..." for a new owner; "I'm listening" with one line on what to do and a **Type instead** button while recording; "One moment..." the instant she taps; "Got it. Writing it down..." while reading. Never two lines of small print squeezed beside buttons.
 - **Questions are choices.** When Spal is unsure it asks "Did you mean A or B?" and shows the likely answers as large tappable buttons, with a text box for anything else.
-- **Spoken voice is for the beginning only** (`lib/speak.ts`, the phone's own voice): the first three times she taps the button Spal says how it works, then listens; replies and questions are read back. It goes quiet after 15 notes, and "Spal talks back to me" in her profile turns it on or off for good. Speech never plays while the mic is open, and never starts by itself on landing (phones block that).
+- **Spal speaks** (`lib/speak.ts`): a real voice from `/api/speak` (ElevenLabs, cached on the phone) with the phone's own voice as backup. It greets her each time the app opens ("Good afternoon, Amaka. Yesterday was ₦38,500..."); if the phone blocks sound before a tap, the greeting plays on her first touch. The first times she taps the green button Spal says how it works, then listens; replies and questions are read back. On by default; "Spal talks back to me" in her profile turns it off. Speech never plays while the mic is open.
+- **Chat with Spal** (`components/app/Chat.tsx`, `/api/chat`): a free conversation, typed or spoken, that records nothing. She can ask about her shop (Spal answers from her real numbers, never calculating new ones) or how to use the app, or just talk. A sale mentioned in chat gets a gentle "tap the green button and tell me".
 
 ## 13. Keeping this file true
 

@@ -78,7 +78,7 @@ The migrations, in order: `init`, `shop_theme`, `usage_limits`, `avatar`, `push`
 ## 6. Setup checklist
 
 Environment variables in Vercel (only names here, never values):
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, `ADMIN_EMAIL`, `NEXT_PUBLIC_CONTACT_EMAIL`. Optional: `ANTHROPIC_MODEL` (for example `claude-haiku-5-5` to cut cost), `NEXT_PUBLIC_GOOGLE_SIGNIN=1`.
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, `ADMIN_EMAIL`, `NEXT_PUBLIC_CONTACT_EMAIL`. Optional: `ELEVENLABS_VOICE_ID` (Spal's spoken voice; the ElevenLabs key must allow text-to-speech), `ANTHROPIC_MODEL` (for example `claude-haiku-5-5` to cut cost), `NEXT_PUBLIC_GOOGLE_SIGNIN=1`.
 
 Also: run `supabase/scheduler.sql` once (it needs the same `CRON_SECRET`), Supabase email (own SMTP, site URL and redirect), the Turnstile secret in Supabase, and all migrations run. `/api/health` reports which keys reached the deploy.
 
