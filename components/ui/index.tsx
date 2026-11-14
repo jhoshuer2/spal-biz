@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import { Icon } from "./Icon";
 export { Icon } from "./Icon";
 export { Orb } from "./Orb";
+export { Aura } from "./Aura";
 export { Logo } from "./Logo";
 export { Roll } from "./Roll";
 

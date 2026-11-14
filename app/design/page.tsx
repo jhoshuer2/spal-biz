@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { Button, Chip, DeltaPill, Icon, ListRow, Orb, ProposalCard, Roll, Segmented, Sheet, Surface, TabBar, TalkButton, TextField, Toggle, type Place } from "@/components/ui";
 import type { OrbState, OrbTone } from "@/components/ui/Orb";
+import { Aura } from "@/components/ui/Aura";
+import { CardStack } from "@/components/app/Cards";
 import { DayDetail, type Row } from "@/components/app/DaySheet";
 import { EditEntry } from "@/components/app/EditEntry";
 import { SetPassword } from "@/components/app/SetPassword";
@@ -72,6 +74,9 @@ export default function DesignPage() {
   const [place, setPlace] = useState<Place>("today");
   const [listening, setListening] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [auraState, setAuraState] = useState<"idle" | "listening" | "thinking">("idle");
+  const [auraTick, setAuraTick] = useState(0);
+  useEffect(() => { if (auraState !== "listening") return; const i = setInterval(() => setAuraTick((x) => x + 1), 80); return () => clearInterval(i); }, [auraState]);
   const [toggle, setToggle] = useState(true);
   const [chip, setChip] = useState("All");
   const [editRow, setEditRow] = useState<Row | null>(null);
@@ -165,6 +170,26 @@ export default function DesignPage() {
           <p className="label" style={{ margin: "12px 0 0" }}>Ẹ kú àárọ̀ · Ọjọ́ òní · Ṣé ó dára? · Ị mere ọ́ma · Ụlọ ahịa</p>
           <p className="muted" style={{ fontSize: 13, margin: "12px 0 0" }}>Headlines: Neue Haas Grotesk Display (shown here with Inter Tight until the licensed files arrive). Text and numerals: Source Sans 3, light for big numbers. Both stand-ins cover ₦ and the Yoruba and Igbo marks.</p>
         </Surface>
+      </Section>
+
+      {/* Aura and card stack */}
+      <Section title="Aura and the three cards">
+        <p className="label" style={{ margin: "0 0 8px" }}>The top of Today. Still when idle; tap Listening to see it follow a voice.</p>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {(["idle", "listening", "thinking"] as const).map((s) => <Button key={s} kind={auraState === s ? "primary" : "secondary"} small onClick={() => setAuraState(s)}>{s}</Button>)}
+        </div>
+        <div className="mood-field" data-mood="normal" style={{ maxWidth: 430, borderRadius: 28, padding: "20px 24px 8px", overflow: "hidden" }}>
+          <Aura state={auraState} level={auraState === "listening" ? 0.5 + 0.4 * Math.sin(auraTick / 3) : 0} />
+          <h3 className="head" style={{ fontSize: 40, margin: "8px 0 0" }}>Good afternoon, Amaka</h3>
+          <div style={{ height: 130 }} />
+        </div>
+        <div style={{ maxWidth: 430, padding: "8px 16px" }}>
+          <CardStack onOpen={() => {}} cards={[
+            { id: "sold", label: "Sold today", kobo: 4_850_000, empty: "", lines: [{ label: "37 sales" }] },
+            { id: "spent", label: "Spent today", kobo: 1_200_000, empty: "", lines: [{ label: "3 expenses" }] },
+            { id: "owed", label: "Owed to you", kobo: 1_840_000, empty: "", lines: [{ label: "Blessing", value: "₦9,000" }, { label: "Mama Chidi", value: "₦6,400" }, { label: "Tunde", value: "₦3,000" }] },
+          ]} />
+        </div>
       </Section>
 
       {/* Day details */}

@@ -204,6 +204,14 @@ Approved by Joshua on 2026-11-13: **Dialogue**. Two voices. A small circle with 
 - Clear space: half the mark's width on every side. Minimum size: 20px for the mark, 80px wide for the lockup.
 - Merch: the mark alone on chests and pins, the lockup on bags and boxes, the repeating mark as pattern on wrapping and tape (lime ground with ink, or night ground with ivory and lime). Source sheets: `design/logo/explore-3.png`, `explore-4.png`.
 
-## 11. Keeping this file true
+## 11. Today: the aura and the three cards
+
+Approved direction from Joshua, 2026-11-14 (reference: a Wallet-style card stack, and Gemini's listening glow).
+
+- **Aura, not orb, on Today.** Spal's voice is a soft field of colour (`components/ui/Aura.tsx`) behind the greeting that fades into the background. Still when idle. It swells and drifts with her voice while she speaks, and drifts slowly while Spal reads her note. Reduced motion keeps it still. The orb stays for onboarding and the closing conversation.
+- **Voice has no sheet.** Tapping the big button starts listening at once; the aura is the listener, with one line and "Type instead" above the tab bar. If Spal cannot understand, the text sheet opens as before.
+- **Three stacked cards** (`components/app/Cards.tsx`): Sold today (lime), Spent today (ink), Owed to you (peach). Each peeks out with its label and number. Tap a card behind to bring it forward; tap the front card to open its sheet (Sold and Spent open the day details on that tab, Owed opens the list of who owes what). Card colours are the `--stack-*` tokens, opaque in light and dark.
+
+## 12. Keeping this file true
 
 When Joshua changes a token, a component, or a rule, edit this file in the same change. When a real screen reveals a missing component, add it here with its rules before using it twice.

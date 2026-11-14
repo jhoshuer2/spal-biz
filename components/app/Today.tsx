@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, DeltaPill, Icon, ListRow, Orb, Roll, Sheet, Surface, TabBar, TalkButton, TextField, type Place } from "@/components/ui";
+import { Aura, Button, DeltaPill, Icon, ListRow, Sheet, Surface, TabBar, TalkButton, TextField, type Place } from "@/components/ui";
 import { parseCapture, sendNote, undoNote, type Reply } from "@/lib/capture";
 import { flush, newId, phoneStore, type NewItem, type OutboxItem } from "@/lib/outbox";
 import { clockLabel, dayKey, forDay, keyOf, learnCloseMinutes, minutesOf, salesOf, spentOf, timeOf, type DayEvent, type Summary } from "@/lib/day";
@@ -18,7 +18,8 @@ import { SaveAccount } from "./SaveAccount";
 import { SetPassword } from "./SetPassword";
 import { Feedback } from "./Feedback";
 import { YourData } from "./YourData";
-import { DaySheet } from "./DaySheet";
+import { DaySheet, type Tab } from "./DaySheet";
+import { CardStack, type CardId, type StackCard } from "./Cards";
 import { ProfileReminders, ReminderPrompt, useReminders } from "./Reminders";
 
 const greeting = (h: number) => (h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening");
@@ -33,6 +34,8 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const sb = supabaseBrowser();
   const [place, setPlace] = useState<Place>("today");
   const [talk, setTalk] = useState(false);
+  const [detailTab, setDetailTab] = useState<Tab | undefined>(undefined);
+  const [owedOpen, setOwedOpen] = useState(false);
   const [profile, setProfile] = useState(false);
   const [closing, setClosing] = useState(false);
   const [note, setNote] = useState("");
@@ -235,7 +238,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     setTalk(true);
     if (!voice.supported) { setTalkMode("text"); return; }
     const r = await voice.start();
-    if (r === "ok") setTalkMode("voice");
+    if (r === "ok") setTalkMode("voice"); // the aura at the top is the listener; no sheet
     else { setTalkMode("text"); setErr("I can't use the microphone. You can type instead."); }
   }
 
@@ -326,11 +329,27 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const dayLabel = (k: string) => (k === todayKey ? "Today" : new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short" }).format(new Date(k + "T12:00:00")));
   const initial = (shop.owner_name ?? "?").trim()[0]?.toUpperCase() ?? "?";
 
+  const nSales = today.filter((e) => e.kind === "sale" || e.kind === "credit_sale").length;
+  const nSpent = today.filter((e) => e.kind === "expense").length;
+  const owedTotal = owing.reduce((s, o) => s + o.kobo, 0);
+  const owedSorted = [...owing].sort((a, b) => b.kobo - a.kobo);
+  const cards: StackCard[] = [
+    { id: "sold", label: "Sold today", kobo: sales, empty: "Nothing sold yet. Tell me when you sell.", lines: nSales ? [{ label: nSales === 1 ? "1 sale" : `${nSales} sales` }] : [] },
+    { id: "spent", label: "Spent today", kobo: spent, empty: "Nothing spent yet.", lines: nSpent ? [{ label: nSpent === 1 ? "1 expense" : `${nSpent} expenses` }] : [] },
+    { id: "owed", label: "Owed to you", kobo: owedTotal, empty: "Nobody owes you. Lovely.", lines: owedSorted.slice(0, 3).map((o) => ({ label: o.name, value: naira(o.kobo) })) },
+  ];
+  function openCard(id: CardId) {
+    if (id === "owed") { setOwedOpen(true); return; }
+    setDetailTab(id === "spent" ? "spent" : "sold");
+    setDetail(todayKey);
+  }
+
   const bigLine = { margin: 0, fontSize: 20, fontWeight: 500, lineHeight: 1.35 } as const;
 
   return (
     <main data-mood={mood} style={{ minHeight: "100dvh", background: "var(--bg)", paddingBottom: 140 }}>
       <div className="mood-field" style={{ padding: "20px 24px 8px" }}>
+        {place === "today" && <Aura tone={evening ? "indigo" : "lilac"} state={voice.state === "recording" ? "listening" : busy || voice.state === "transcribing" ? "thinking" : "idle"} level={voice.level} />}
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button className={`icon-btn ${avatar ? "photo" : ""}`} aria-label="Profile" onClick={() => setProfile(true)}>
             {avatar ? <img src={avatar} alt="" className="avatar" width={48} height={48} /> : <Icon name="user" />}
@@ -339,9 +358,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
         {place === "today" ? (
           <>
             <h1 className="head" style={{ fontSize: 40, margin: "8px 0 0" }}>{greeting(hour)}, {first}</h1>
-            <div style={{ display: "grid", placeItems: "center", padding: "16px 0 8px" }}>
-              <Orb tone={evening ? "indigo" : "lilac"} size={hasToday ? 150 : 190} state={busy ? "thinking" : "idle"} />
-            </div>
+            <div style={{ height: hasToday || owing.length ? 120 : 160 }} />
           </>
         ) : (
           <h1 className="head" style={{ fontSize: 40, margin: "8px 0 24px" }}>My business</h1>
@@ -419,13 +436,8 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
               </Surface>
             )}
 
-            {!noSignal && hasToday ? (
-              <button className="surface tap-card" onClick={() => setDetail(todayKey)} aria-label="See what is behind today's number">
-                <span className="label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>Today so far <Icon name="chevron" size={20} /></span>
-                <span className="num" style={{ fontSize: 64, marginTop: 14, display: "block" }}><Roll prefix="₦" value={Math.round(sales / 100)} /></span>
-                {spent > 0 && <span style={{ marginTop: 14, display: "block" }}><DeltaPill tone="flat">Spent {naira(spent)}</DeltaPill></span>}
-              </button>
-            ) : !noSignal && !reply && !evening ? (
+            {!noSignal && (hasToday || owing.length > 0) ? (
+              <CardStack cards={cards} onOpen={openCard} />            ) : !noSignal && !reply && !evening ? (
               <Surface>
                 <p style={bigLine}>
                   {lastClose?.total_kobo
@@ -435,14 +447,6 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
               </Surface>
             ) : null}
 
-            {owing.length > 0 && (
-              <Surface>
-                <span className="label">Owing you</span>
-                <div style={{ marginTop: 4 }}>
-                  {owing.slice(0, 3).map((o) => <ListRow key={o.name} label={o.name} value={<span style={{ color: "var(--care-text)", fontWeight: 600 }}>{naira(o.kobo)}</span>} chevron={false} />)}
-                </div>
-              </Surface>
-            )}
           </>
         ) : (
           <>
@@ -455,7 +459,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
             <span className="label">Your days</span>
             <div style={{ marginTop: 4 }}>
               {dayList.length === 0 && <p className="label" style={{ margin: "12px 0 4px", fontSize: 17 }}>Nothing yet. Tell me about your first sale.</p>}
-              {dayList.map((d) => <ListRow key={d.k} label={dayLabel(d.k)} value={d.total > 0 ? naira(d.total) : ""} onClick={() => setDetail(d.k)} />)}
+              {dayList.map((d) => <ListRow key={d.k} label={dayLabel(d.k)} value={d.total > 0 ? naira(d.total) : ""} onClick={() => { setDetailTab(undefined); setDetail(d.k); }} />)}
             </div>
           </Surface>
           </>
@@ -466,22 +470,26 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
         <TabBar place={place} onPlace={setPlace} listening={voice.state === "recording"} level={voice.level} onTalk={onTalk} />
       </div>
 
-      <Sheet open={talk} onClose={closeTalk} title="Tell Spal">
-        {talkMode === "voice" ? (
-          <div style={{ display: "grid", justifyItems: "center", gap: 8, padding: "4px 0 8px" }}>
-            <Orb tone="lilac" size={120} state={voice.state === "recording" ? "listening" : "thinking"} level={voice.level} />
-            <p className="label" style={{ margin: "4px 0 0", fontSize: 18 }}>{voice.state === "recording" ? "Listening. Tap when you're done." : "One moment"}</p>
-            <TalkButton listening={voice.state === "recording"} level={voice.level} onClick={stopAndSend} />
-            <Button kind="ghost" small onClick={() => { voice.cancel(); setTalkMode("text"); }}>Type instead</Button>
-          </div>
-        ) : (
-          <>
-            <h2 className="head" style={{ fontSize: 26, margin: "0 0 16px" }}>What happened?</h2>
-            <TextField value={note} onChange={setNote} onSubmit={() => send(note)} placeholder="Sold two tins of milk, ₦4,500" autoFocus
-              onMic={voice.supported ? async () => { setErr(null); const r = await voice.start(); if (r === "ok") setTalkMode("voice"); else setErr("I can't use the microphone. You can type instead."); } : undefined} />
-            {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
-            <div style={{ marginTop: 16 }}><Button block onClick={() => send(note)} disabled={!note.trim() || busy}>{busy ? "One moment" : "Tell Spal"}</Button></div>
-          </>
+      <Sheet open={talk && talkMode === "text"} onClose={closeTalk} title="Tell Spal">
+        <h2 className="head" style={{ fontSize: 26, margin: "0 0 16px" }}>What happened?</h2>
+        <TextField value={note} onChange={setNote} onSubmit={() => send(note)} placeholder="Sold two tins of milk, ₦4,500" autoFocus
+          onMic={voice.supported ? async () => { setErr(null); const r = await voice.start(); if (r === "ok") { setTalkMode("voice"); } else setErr("I can't use the microphone. You can type instead."); } : undefined} />
+        {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
+        <div style={{ marginTop: 16 }}><Button block onClick={() => send(note)} disabled={!note.trim() || busy}>{busy ? "One moment" : "Tell Spal"}</Button></div>
+      </Sheet>
+
+      {talk && talkMode === "voice" && (
+        <div className="listen-strip" role="status">
+          <span className="pill">{voice.state === "recording" ? "Listening. Tap the button when you're done." : "One moment"}</span>
+          <Button kind="secondary" small onClick={() => { voice.cancel(); setTalkMode("text"); }}>Type instead</Button>
+        </div>
+      )}
+
+      <Sheet open={owedOpen} onClose={() => setOwedOpen(false)} title="Owed to you">
+        <h2 className="head" style={{ fontSize: 26, margin: "0 0 4px" }}>Owed to you</h2>
+        <p className="num" style={{ fontSize: 40, margin: "0 0 12px" }}>{naira(owedTotal)}</p>
+        {owedSorted.length === 0 ? <p className="label" style={{ fontSize: 17 }}>Nobody owes you right now.</p> : (
+          <div>{owedSorted.map((o) => <ListRow key={o.name} label={o.name} value={<span style={{ color: "var(--care-text)", fontWeight: 600 }}>{naira(o.kobo)}</span>} chevron={false} />)}</div>
         )}
       </Sheet>
 
@@ -528,7 +536,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
         ))}
       </Sheet>
 
-      <DaySheet open={detail !== null} onClose={() => setDetail(null)} sb={sb} shopId={shop.id} onChanged={refresh} startKey={detail ?? todayKey} todayKey={todayKey} custNames={custNames} itemNames={itemNames} />
+      <DaySheet open={detail !== null} onClose={() => setDetail(null)} sb={sb} shopId={shop.id} onChanged={refresh} startKey={detail ?? todayKey} startTab={detailTab} todayKey={todayKey} custNames={custNames} itemNames={itemNames} />
 
       <YourData open={dataOpen} onClose={() => setDataOpen(false)} sb={sb} shopName={shop.name} />
 

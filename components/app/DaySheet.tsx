@@ -7,7 +7,7 @@ import { naira } from "@/lib/format";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type Row = DayEvent & { id: string; customer_id: string | null; note: string | null; due_date: string | null };
-type Tab = "sold" | "spent" | "paid" | "notes";
+export type Tab = "sold" | "spent" | "paid" | "notes";
 
 const PAGE = 80;
 const parseKey = (k: string) => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
@@ -17,8 +17,8 @@ const short = (k: string) => new Intl.DateTimeFormat("en-GB", { weekday: "short"
 const dayName = (k: string, today: string) => (k === today ? "Today" : k === shift(today, -1) ? "Yesterday" : short(k));
 
 /** Everything behind the number. Opens from a tap on "Today so far", and she can step back through days. */
-export function DaySheet({ open, onClose, sb, shopId, startKey, todayKey, custNames, itemNames, onChanged }: {
-  open: boolean; onClose: () => void; sb: SupabaseClient; shopId: string; startKey: string; todayKey: string;
+export function DaySheet({ open, onClose, sb, shopId, startKey, startTab, todayKey, custNames, itemNames, onChanged }: {
+  startTab?: Tab; open: boolean; onClose: () => void; sb: SupabaseClient; shopId: string; startKey: string; todayKey: string;
   custNames: Map<string, string>; itemNames: Map<string, string>; onChanged: () => void;
 }) {
   const [key, setKey] = useState(startKey);
@@ -49,7 +49,7 @@ export function DaySheet({ open, onClose, sb, shopId, startKey, todayKey, custNa
   return (
     <Sheet open={open} onClose={onClose} title="Day details">
       {rows === null ? (<>{nav}<p className="label" style={{ textAlign: "center", margin: "32px 0" }}>One moment</p></>) : (
-        <DayDetail key={key} header={nav} rows={rows} custNames={custNames} itemNames={itemNames} onPick={setEdit} />
+        <DayDetail key={key} startTab={startTab} header={nav} rows={rows} custNames={custNames} itemNames={itemNames} onPick={setEdit} />
       )}
       <EditEntry row={edit} sb={sb} shopId={shopId} custNames={custNames} itemNames={itemNames} onClose={() => setEdit(null)} onChanged={() => { setVersion((v) => v + 1); onChanged(); }} />
     </Sheet>
@@ -60,13 +60,13 @@ export function DaySheet({ open, onClose, sb, shopId, startKey, todayKey, custNa
  * The day as two clear halves, Sold and Spent, that stay on screen while she scrolls.
  * Built for a busy shop: search, a "By item" total, and pages of 80 instead of everything at once.
  */
-export function DayDetail({ header, rows, custNames, itemNames, onPick }: { header?: React.ReactNode; rows: Row[]; custNames: Map<string, string>; itemNames: Map<string, string>; onPick?: (r: Row) => void }) {
+export function DayDetail({ startTab, header, rows, custNames, itemNames, onPick }: { startTab?: Tab; header?: React.ReactNode; rows: Row[]; custNames: Map<string, string>; itemNames: Map<string, string>; onPick?: (r: Row) => void }) {
   const sold = useMemo(() => rows.filter((r) => r.kind === "sale" || r.kind === "credit_sale"), [rows]);
   const spent = useMemo(() => rows.filter((r) => r.kind === "expense"), [rows]);
   const paid = useMemo(() => rows.filter((r) => r.kind === "payment_received"), [rows]);
   const notes = useMemo(() => rows.filter((r) => r.kind === "stock_note" || r.kind === "day_total"), [rows]);
 
-  const [tab, setTab] = useState<Tab>(sold.length || !spent.length ? "sold" : "spent");
+  const [tab, setTab] = useState<Tab>(startTab ?? (sold.length || !spent.length ? "sold" : "spent"));
   const [by, setBy] = useState<"order" | "items">("order");
   const [q, setQ] = useState("");
   const [shown, setShown] = useState(PAGE);

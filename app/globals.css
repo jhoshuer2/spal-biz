@@ -30,6 +30,9 @@
   --on-nav: #f4f5f7;
   --shadow: 0 10px 30px rgb(14 17 22 / 0.12), 0 2px 6px rgb(14 17 22 / 0.06);
   --scrim: rgb(14 17 22 / 0.4);
+  --stack-sold: #c9f23c; --stack-sold-ink: #0e1116;
+  --stack-spent: #0e1116; --stack-spent-ink: #f4f5f7;
+  --stack-owed: #ffd9c2; --stack-owed-ink: #3a1a08;
 
   --r-input: 12px;
   --r-card: 20px;
@@ -64,6 +67,9 @@
   --on-nav: #f4f5f7;
   --shadow: 0 10px 30px rgb(0 0 0 / 0.5);
   --scrim: rgb(0 0 0 / 0.6);
+  --stack-sold: #c9f23c; --stack-sold-ink: #0e1116;
+  --stack-spent: #2c313c; --stack-spent-ink: #f4f5f7;
+  --stack-owed: #5a331f; --stack-owed-ink: #ffe6d6;
   --mood-from: #26244f;
   --mood-ink: #f4f5f7;
   --mood-ink-2: #c4c8d4;
@@ -91,6 +97,9 @@
     --on-nav: #f4f5f7;
     --shadow: 0 10px 30px rgb(0 0 0 / 0.5);
     --scrim: rgb(0 0 0 / 0.6);
+  --stack-sold: #c9f23c; --stack-sold-ink: #0e1116;
+  --stack-spent: #2c313c; --stack-spent-ink: #f4f5f7;
+  --stack-owed: #5a331f; --stack-owed-ink: #ffe6d6;
     --mood-from: #26244f;
     --mood-ink: #f4f5f7;
     --mood-ink-2: #c4c8d4;
@@ -280,3 +289,41 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .boot-ret { display: none; min-height: 100dvh; background: var(--bg); place-items: center; }
 html[data-boot="returning"] .boot-ret { display: grid; }
 html[data-boot="returning"] .boot-new { display: none !important; }
+
+
+/* ============ Aura: Spal's voice, in the background ============ */
+.mood-field { position: relative; isolation: isolate; }
+.aura { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 38%, #000 70%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 38%, #000 70%, transparent 100%); }
+
+/* ============ Card stack: Sold, Spent, Owed ============ */
+.stack { position: relative; margin: 4px 0 8px; }
+.stack-card {
+  position: absolute; left: 0; right: 0; display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; text-align: left; border: 0; font: inherit; cursor: pointer;
+  border-radius: 28px; padding: 0 22px; overflow: hidden;
+  box-shadow: 0 -8px 20px rgb(14 17 22 / 0.10);
+  transition: top 0.38s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.12s ease-out;
+}
+.stack-card:active { transform: scale(0.99); }
+.stack-sold { background: var(--stack-sold); color: var(--stack-sold-ink); }
+.stack-spent { background: var(--stack-spent); color: var(--stack-spent-ink); }
+.stack-owed { background: var(--stack-owed); color: var(--stack-owed-ink); }
+.stack-head { height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stack-label { font-size: 18px; font-weight: 600; }
+.stack-mini { font-size: 24px; transition: opacity 0.2s; }
+.stack-card[data-front="true"] .stack-mini { opacity: 0; }
+.stack-chev { position: absolute; right: 20px; top: 24px; display: grid; }
+.stack-body { display: block; opacity: 0; transform: translateY(8px); transition: opacity 0.25s 0.1s, transform 0.3s 0.1s; }
+.stack-card[data-front="true"] .stack-body { opacity: 1; transform: none; }
+.stack-big { display: block; font-size: 56px; line-height: 1.05; color: inherit; }
+.stack-lines { display: grid; gap: 6px; margin-top: 14px; font-size: 17px; }
+.stack-line { display: flex; justify-content: space-between; gap: 12px; opacity: 0.85; }
+.stack-line span:last-child { font-weight: 600; opacity: 1; }
+.stack-empty { opacity: 0.75; }
+.stack-card .num { color: inherit; }
+
+/* Listening strip: the aura above is the listener; this just says what to do */
+.listen-strip { position: fixed; left: 0; right: 0; bottom: 104px; padding: 0 24px; max-width: 560px; margin: 0 auto; z-index: 21;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.listen-strip .pill { background: var(--surface); color: var(--ink); border-radius: 999px; padding: 12px 18px; box-shadow: var(--shadow); font-size: 17px; }
