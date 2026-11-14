@@ -133,20 +133,22 @@ export async function speak(text: string): Promise<boolean> {
   return phoneVoice(s);
 }
 
-/** Speak now; if the phone blocks sound until she touches it, speak on her first touch (unless she is already doing something). */
-export function speakWhenAllowed(text: string) {
+/** Speak now; if the phone blocks sound until she touches it, say so through `waiting` and speak on her first touch (unless she is pressing the talk button, which speaks for itself). */
+export function speakWhenAllowed(text: string, waiting?: (w: boolean) => void) {
   speak(text).then((ok) => {
     if (ok) return;
+    waiting?.(true);
     const once = (e: Event) => {
       window.removeEventListener("pointerdown", once, true);
       const t = e.target as Element | null;
-      if (t?.closest?.(".talk, .tabbar, input, textarea")) return; // she is already acting; do not talk over her
+      if (t?.closest?.(".talk, .tabbar, input, textarea")) { waiting?.(false); return; } // she is already acting; do not talk over her
       unlockSpeech();
-      speak(text);
+      speak(text).then(() => waiting?.(false));
     };
     window.addEventListener("pointerdown", once, true);
   });
 }
+export const isIOS = () => typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
 /** What Spal says when the answer arrives: short, because "Got it" was already said the moment she tapped. */
 export function replyToSay(r: { question: string | null; lines: string[]; status: string; changed?: boolean }) {

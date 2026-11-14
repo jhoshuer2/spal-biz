@@ -12,7 +12,7 @@ import { supabaseBrowser } from "@/lib/supabase";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { micMessage, transcribe, useVoice } from "@/lib/voice";
 import { Chat } from "./Chat";
-import { bumpNotes, cueFor, introDone, setupSpeech, speakWhenAllowed, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
+import { bumpNotes, cueFor, introDone, isIOS, setupSpeech, speakWhenAllowed, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
 import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
@@ -40,6 +40,8 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const [talk, setTalk] = useState(false);
   const [starting, setStarting] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [greetWaiting, setGreetWaiting] = useState(false);
+  const greetLine = useRef("");
   const [loaded, setLoaded] = useState(false);
   const [intro, setIntro] = useState(false);
   const [speaksOn, setSpeaksOn] = useState(false);
@@ -252,7 +254,8 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
       : isNewOwner() ? `${g} How was your day? Tap the green button to tell me, or tap Chat with Spal to ask me anything.`
       : lastClose?.total_kobo ? `${g} Yesterday was ${naira(lastClose.total_kobo)}. Let's beat it today.`
       : `${g} How's business today?`;
-    speakWhenAllowed(line);
+    greetLine.current = line;
+    speakWhenAllowed(line, setGreetWaiting);
   }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function send(text: string, context?: string, voiceBlob?: Blob) {
@@ -286,7 +289,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     setTalkMode("voice");
     setStarting(true);
     // The first few times, Spal says how it works, then starts listening. Spoken before the mic opens so it is not recorded.
-    const cue = speakOn() && micKnown() ? cueFor() : null;
+    const cue = speakOn() && (micKnown() || !isIOS()) ? cueFor() : null; // iPhones need the mic permission asked from the tap itself
     if (cue) { introDone(); setIntro(true); await speak(cue); setIntro(false); }
     const r = await voice.start();
     setStarting(false);
@@ -460,6 +463,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
                   )}
                   {err && !talk && <p className="coach-sub" role="alert" style={{ color: "var(--care-text)" }}>{err}</p>}
                   <div className="coach-actions">
+                    {greetWaiting && <Button small onClick={() => { unlockSpeech(); setGreetWaiting(false); speak(greetLine.current); }}>Tap to hear Spal</Button>}
                     <Button kind="secondary" small onClick={() => { setTalkMode("text"); setTalk(true); }}>Type instead</Button>
                     <Button kind="secondary" small onClick={pickPhoto}>Add a photo</Button>
                     <Button kind="secondary" small onClick={() => { stopSpeaking(); setChatOpen(true); }}>Chat with Spal</Button>
