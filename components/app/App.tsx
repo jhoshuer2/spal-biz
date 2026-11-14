@@ -86,7 +86,7 @@ export function App() {
   };
   const WHY: Record<Why, string> = {
     rate: "A lot of people are signing up right now. Please wait a few minutes and try again.",
-    captcha: "I couldn't check that you're a real person. Please try again.",
+    captcha: "I couldn't load the safety check on this connection. Please try again. If it keeps happening, turn off data saver or any ad blocker, or switch to Wi-Fi.",
     network: "I can't connect. Please check your data or Wi-Fi and try again.",
     other: "I couldn't get started just now. Please try again.",
   };
@@ -110,7 +110,7 @@ export function App() {
     }
     // Make the private account. A flaky connection or a slow captcha is retried once on its own, with a fresh check.
     let lastErr: unknown = null, why: Why = "other";
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const { data: { session } } = await sb.auth.getSession();
         if (!session) {
@@ -124,7 +124,7 @@ export function App() {
       } catch (e) {
         lastErr = e; why = classify(e);
         diag(String((e as Error)?.message ?? "").toLowerCase().includes("captcha") ? "signup-captcha" : "signup-account", why, e, attempt);
-        if (why === "rate" || attempt === 2) break;
+        if (why === "rate" || attempt === 3) break;
         await new Promise((r) => setTimeout(r, 1500));
       }
     }

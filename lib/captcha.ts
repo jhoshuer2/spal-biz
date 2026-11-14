@@ -5,17 +5,32 @@ type Turnstile = { render: (el: HTMLElement, o: Record<string, unknown>) => stri
 declare global { interface Window { turnstile?: Turnstile } }
 
 let loading: Promise<void> | null = null;
+const SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+
+/** One try at loading the check. A slow phone gets 25 seconds before we give up on this try. */
+function loadOnce(): Promise<void> {
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = SRC;
+    s.async = true;
+    const t = setTimeout(() => { s.remove(); rej(new Error("captcha script timeout")); }, 25_000);
+    s.onload = () => { clearTimeout(t); res(); };
+    s.onerror = () => { clearTimeout(t); s.remove(); rej(new Error("captcha script")); };
+    document.head.appendChild(s);
+  });
+}
+
+/** Load the check, trying up to three times with a pause. A failed try must never be remembered: it used to be, so every retry failed the same way. */
 function load() {
   if (window.turnstile) return Promise.resolve();
   if (!loading) {
-    loading = new Promise((res, rej) => {
-      const s = document.createElement("script");
-      s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-      s.async = true;
-      s.onload = () => res();
-      s.onerror = () => rej(new Error("captcha script"));
-      document.head.appendChild(s);
-    });
+    loading = (async () => {
+      let last: unknown = null;
+      for (let i = 0; i < 3; i++) {
+        try { await loadOnce(); return; } catch (e) { last = e; await new Promise((r) => setTimeout(r, 1200 * (i + 1))); }
+      }
+      throw last;
+    })().catch((e) => { loading = null; throw e; });
   }
   return loading;
 }
