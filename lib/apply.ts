@@ -10,7 +10,7 @@ export type Action = {
   amount_naira: number | null; unit_price_naira: number | null; quantity: number | null;
   item: string | null; customer: string | null; due_date: string | null; note: string | null; occurred_on: string | null; occurred_time?: string | null; confidence: number;
 };
-export type Parsed = { actions: Action[]; question: string | null };
+export type Parsed = { actions: Action[]; question: string | null; options?: string[] | null };
 
 const clean = (s: string | null | undefined) => (s ?? "").trim();
 const norm = (s: string) => s.trim().toLowerCase();

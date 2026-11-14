@@ -11,7 +11,7 @@ export const maxDuration = 30;
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 const nullable = (t: string) => ({ type: [t, "null"] });
 const SCHEMA = {
-  type: "object", additionalProperties: false, required: ["actions", "question"],
+  type: "object", additionalProperties: false, required: ["actions", "question", "options"],
   properties: {
     actions: {
       type: "array",
@@ -29,6 +29,7 @@ const SCHEMA = {
       },
     },
     question: nullable("string"),
+    options: { type: ["array", "null"], items: { type: "string" } },
   },
 } as const;
 
@@ -54,6 +55,7 @@ Rules:
 - customer: if she means someone in the known customers list, use that exact name. Otherwise the name as she said it. Null if nobody is named.
 - Dates and times are part of what she says, so listen for them like a person would. If she says when something happened ("at 6:30", "around 4", "4:05 this afternoon", "an hour ago", "after church", "before 9"), set occurred_time (HH:MM, 24 hours, Lagos) on that record. Work out am or pm from the kind of shop and the time of her note: a shop sells in the day, so "6:30" told at 7:12 in the evening is 18:30, never a time after her note was recorded. Work out "an hour ago" and "just now" from the time her note was recorded. Different times for different sales mean separate records, each with its own occurred_time ("apple juice 500 at 4:05 and 2,000 at 6:30" is two sales). A time that covers several things ("this morning I sold ...") with no exact hour: leave occurred_time null. If she gives no time at all, occurred_time is null and the system uses the moment she told you, so never invent one. You may also set occurred_time on an update when she corrects when something happened ("that was at 5, not 6").
 - If she is telling you about an earlier day ("yesterday", "last Tuesday", a date), set occurred_on (YYYY-MM-DD) on added records. Otherwise null. With a time and no day, the day is the day of her note.
+- When you ask a question and two or three answers are likely, phrase it as a choice ("Did you mean 5,000 each, or 5,000 in all?") and put those answers in options, short and in her own words ("5,000 each", "5,000 in all"). The choices are tappable buttons for a busy owner, so keep each under 6 words. If there are no likely answers, options is null.
 - Ask at most ONE short friendly question (under 15 words, in her own style) when you cannot tell the amount, which record she means, or anything above. You may return actions and a question together when part of her note is clear. If her note is not about the shop at all, return no actions and ask what she meant.
 - confidence is 0 to 1: how sure you are you read it right.`;
 
@@ -148,6 +150,7 @@ export async function POST(req: Request) {
   const itemIndex = new Map<string, string>();
   for (const i of items ?? []) [i.name, ...(i.aliases ?? [])].forEach((n: string) => itemIndex.set(norm(n), i.id));
 
+  const options = (parsed.options ?? []).map((o) => clean(o)).filter(Boolean).slice(0, 3);
   const { lines, changed, wrote, missed, touchedCustomers, boughtCustomers, historyFailed } = await applyActions(
     { sb, shopId, captureId: capture.id as string, capturedAt: capture.created_at as string, byRef, custName, itemName, custIndex, itemIndex }, parsed.actions ?? []);
 
@@ -173,8 +176,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: "needs_answer", lines: [], question: "I can't change saved records just yet. My setup isn't finished.", changed: false, reason: "history_missing" });
     }
     if (!question) question = missed ? "Which one do you mean? Tell me a bit more." : "Sorry, I didn't catch that. How much was it?";
-    return NextResponse.json({ status: "needs_answer", lines: [], question, changed: false });
+    return NextResponse.json({ status: "needs_answer", lines: [], question, options, changed: false });
   }
   await sb.from("capture").update({ status: "parsed" }).eq("id", capture.id);
-  return NextResponse.json({ status: "parsed", lines, question: question || null, changed });
+  return NextResponse.json({ status: "parsed", lines, question: question || null, options: question ? options : [], changed });
 }

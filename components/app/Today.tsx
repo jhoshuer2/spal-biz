@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Aura, Button, DeltaPill, Icon, ListRow, Sheet, Surface, TabBar, TalkButton, TextField, type Place } from "@/components/ui";
+import { Aura, Button, DeltaPill, Icon, ListRow, Sheet, Toggle, Surface, TabBar, TalkButton, TextField, type Place } from "@/components/ui";
 import { parseCapture, sendNote, undoNote, type Reply } from "@/lib/capture";
 import { flush, newId, phoneStore, type NewItem, type OutboxItem } from "@/lib/outbox";
 import { clockLabel, dayKey, forDay, keyOf, learnCloseMinutes, minutesOf, salesOf, spentOf, timeOf, type DayEvent, type Summary } from "@/lib/day";
@@ -10,6 +10,7 @@ import type { Shop } from "@/lib/supabase";
 import { supabaseBrowser } from "@/lib/supabase";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { transcribe, useVoice } from "@/lib/voice";
+import { bumpNotes, introDone, introDue, INTRO_TEXT, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
 import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
@@ -34,6 +35,10 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const sb = supabaseBrowser();
   const [place, setPlace] = useState<Place>("today");
   const [talk, setTalk] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [intro, setIntro] = useState(false);
+  const [speaksOn, setSpeaksOn] = useState(false);
+  useEffect(() => { setSpeaksOn(speakOn()); }, []);
   const [detailTab, setDetailTab] = useState<Tab | undefined>(undefined);
   const [owedOpen, setOwedOpen] = useState(false);
   const [profile, setProfile] = useState(false);
@@ -227,18 +232,27 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     if (keepFailed || !r) { setErr("I couldn't keep that. Please try again."); return; }
     if (r.offline) { await keepForLater({ kind: "parse", captureId: r.captureId, text: r.note, context }); setNote(""); setAnswer(""); setTalk(false); setReply(null); return; }
     setNote(""); setAnswer(""); setTalk(false); setReply(r);
+    bumpNotes();
+    if (speakOn()) { const s = replyToSay(r); if (s) speak(s); }
     refresh();
   }
 
-  /** The big button: start listening, or stop and send what she said. */
+  /** The big button: start listening, or stop and send what she said. She sees Spal react the instant she taps. */
   async function onTalk() {
     if (voice.state === "recording") return stopAndSend();
-    if (voice.state === "transcribing" || busy) return;
+    if (voice.state === "transcribing" || busy || starting) return;
     setErr(null);
+    stopSpeaking();
+    unlockSpeech();
     setTalk(true);
     if (!voice.supported) { setTalkMode("text"); return; }
+    setTalkMode("voice");
+    setStarting(true);
+    // The first few times, Spal says how it works, then starts listening. Spoken before the mic opens so it is not recorded.
+    if (speakOn() && introDue() && micKnown()) { introDone(); setIntro(true); await speak(INTRO_TEXT); setIntro(false); }
     const r = await voice.start();
-    if (r === "ok") setTalkMode("voice"); // the aura at the top is the listener; no sheet
+    setStarting(false);
+    if (r === "ok") rememberMic();
     else { setTalkMode("text"); setErr("I can't use the microphone. You can type instead."); }
   }
 
@@ -329,6 +343,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const dayLabel = (k: string) => (k === todayKey ? "Today" : new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short" }).format(new Date(k + "T12:00:00")));
   const initial = (shop.owner_name ?? "?").trim()[0]?.toUpperCase() ?? "?";
 
+  const listening = voice.state === "recording";
   const nSales = today.filter((e) => e.kind === "sale" || e.kind === "credit_sale").length;
   const nSpent = today.filter((e) => e.kind === "expense").length;
   const owedTotal = owing.reduce((s, o) => s + o.kobo, 0);
@@ -349,7 +364,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   return (
     <main data-mood={mood} style={{ minHeight: "100dvh", background: "var(--bg)", paddingBottom: 140 }}>
       <div className="mood-field" style={{ padding: "20px 24px 8px" }}>
-        {place === "today" && <Aura tone={evening ? "indigo" : "lilac"} state={voice.state === "recording" ? "listening" : busy || voice.state === "transcribing" ? "thinking" : "idle"} level={voice.level} />}
+        {place === "today" && <Aura tone={evening ? "indigo" : "lilac"} state={voice.state === "recording" ? "listening" : starting || busy || voice.state === "transcribing" ? "thinking" : "idle"} level={voice.level} />}
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button className={`icon-btn ${avatar ? "photo" : ""}`} aria-label="Profile" onClick={() => setProfile(true)}>
             {avatar ? <img src={avatar} alt="" className="avatar" width={48} height={48} /> : <Icon name="user" />}
@@ -358,7 +373,28 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
         {place === "today" ? (
           <>
             <h1 className="head" style={{ fontSize: 40, margin: "8px 0 0" }}>{greeting(hour)}, {first}</h1>
-            <div style={{ height: hasToday || owing.length ? 120 : 160 }} />
+            <div className="coach" style={{ minHeight: hasToday || owing.length ? 120 : 150 }} aria-live="polite">
+              {listening ? (
+                <>
+                  <p className="coach-big">I'm listening</p>
+                  <p className="coach-sub">Talk like you would to a friend. When you're done, tap the green button.</p>
+                  <Button kind="secondary" small onClick={() => { voice.cancel(); setTalkMode("text"); }}>Type instead</Button>
+                </>
+              ) : starting ? (
+                <>
+                  <p className="coach-big">{intro ? "Listen first…" : "One moment…"}</p>
+                  {intro && <Button kind="secondary" small onClick={() => stopSpeaking()}>Skip</Button>}
+                </>
+              ) : busy || voice.state === "transcribing" ? (
+                <p className="coach-big">Got it. Writing it down…</p>
+              ) : isNewOwner() && !reply && !hasToday ? (
+                <>
+                  <p className="coach-big">How was your day?</p>
+                  <p className="coach-sub">Tap the big green button and tell me what you sold, what you spent, or who owes you.</p>
+                  <Button kind="secondary" small onClick={() => { setTalkMode("text"); setTalk(true); }}>Type instead</Button>
+                </>
+              ) : null}
+            </div>
           </>
         ) : (
           <h1 className="head" style={{ fontSize: 40, margin: "8px 0 24px" }}>My business</h1>
@@ -412,7 +448,12 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
                     {reply.question && (
                       <div style={{ marginTop: reply.lines.length ? 16 : 0 }}>
                         <p style={bigLine}>{reply.question}</p>
-                        <div style={{ marginTop: 12 }}><TextField value={answer} onChange={setAnswer} placeholder="Type here" onSubmit={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} /></div>
+                        {(reply.options?.length ?? 0) > 0 && (
+                          <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                            {reply.options!.map((o) => <button key={o} className="chip choice" disabled={busy} onClick={() => send(o, `${reply.note} | Spal asked: ${reply.question}`)}>{o}</button>)}
+                          </div>
+                        )}
+                        <div style={{ marginTop: 12 }}><TextField value={answer} onChange={setAnswer} placeholder={(reply.options?.length ?? 0) > 0 ? "Or type it" : "Type here"} onSubmit={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} /></div>
                         <div style={{ marginTop: 12, display: "grid" }}><Button onClick={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} disabled={!answer.trim() || busy}>{busy ? "One moment" : "Send"}</Button></div>
                       </div>
                     )}
@@ -478,13 +519,6 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
         <div style={{ marginTop: 16 }}><Button block onClick={() => send(note)} disabled={!note.trim() || busy}>{busy ? "One moment" : "Tell Spal"}</Button></div>
       </Sheet>
 
-      {talk && talkMode === "voice" && (
-        <div className="listen-strip" role="status">
-          <span className="pill">{voice.state === "recording" ? "Listening. Tap the button when you're done." : "One moment"}</span>
-          <Button kind="secondary" small onClick={() => { voice.cancel(); setTalkMode("text"); }}>Type instead</Button>
-        </div>
-      )}
-
       <Sheet open={owedOpen} onClose={() => setOwedOpen(false)} title="Owed to you">
         <h2 className="head" style={{ fontSize: 26, margin: "0 0 4px" }}>Owed to you</h2>
         <p className="num" style={{ fontSize: 40, margin: "0 0 12px" }}>{naira(owedTotal)}</p>
@@ -510,6 +544,8 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
         </div>
         {photoErr && <p role="alert" style={{ color: "var(--care-text)", margin: "4px 0 8px" }}>{photoErr}</p>}
         <ProfileReminders r={reminders} />
+        <p className="label" style={{ margin: "16px 0 4px" }}>Spal's voice</p>
+        <div className="row"><span>Spal talks back to me</span><Toggle checked={speaksOn} label="Spal talks back to me" onChange={(v) => { setSpeak(v); setSpeaksOn(v); if (!v) stopSpeaking(); }} /></div>
         <p className="label" style={{ margin: "16px 0 4px" }}>Your data</p>
         <button className="row" onClick={() => { setProfile(false); setDataOpen(true); }}><span>Download or delete my data</span><Icon name="chevron" size={20} /></button>
         <p className="label" style={{ margin: "16px 0 4px" }}>Help</p>

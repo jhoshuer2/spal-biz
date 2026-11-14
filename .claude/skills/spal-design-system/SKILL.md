@@ -212,6 +212,14 @@ Approved direction from Joshua, 2026-11-14 (reference: a Wallet-style card stack
 - **Voice has no sheet.** Tapping the big button starts listening at once; the aura is the listener, with one line and "Type instead" above the tab bar. If Spal cannot understand, the text sheet opens as before.
 - **Three stacked cards** (`components/app/Cards.tsx`): Sold today (lime), Spent today (ink), Owed to you (peach). Each peeks out with its label and number. Tap a card behind to bring it forward; tap the front card to open its sheet (Sold and Spent open the day details on that tab, Owed opens the list of who owes what). Card colours are the `--stack-*` tokens, opaque in light and dark.
 
-## 12. Keeping this file true
+## 12. Guidance and feedback (new owners first)
+
+Most owners are not technical. Spal always says what is happening and what to do next, in plain words, so she is never left wondering.
+
+- **Coach text** (`.coach`, over the aura): "How was your day? Tap the big green button..." for a new owner; "I'm listening" with one line on what to do and a **Type instead** button while recording; "One moment..." the instant she taps; "Got it. Writing it down..." while reading. Never two lines of small print squeezed beside buttons.
+- **Questions are choices.** When Spal is unsure it asks "Did you mean A or B?" and shows the likely answers as large tappable buttons, with a text box for anything else.
+- **Spoken voice is for the beginning only** (`lib/speak.ts`, the phone's own voice): the first three times she taps the button Spal says how it works, then listens; replies and questions are read back. It goes quiet after 15 notes, and "Spal talks back to me" in her profile turns it on or off for good. Speech never plays while the mic is open, and never starts by itself on landing (phones block that).
+
+## 13. Keeping this file true
 
 When Joshua changes a token, a component, or a rule, edit this file in the same change. When a real screen reveals a missing component, add it here with its rules before using it twice.

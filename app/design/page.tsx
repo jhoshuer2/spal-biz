@@ -181,7 +181,11 @@ export default function DesignPage() {
         <div className="mood-field" data-mood="normal" style={{ maxWidth: 430, borderRadius: 28, padding: "20px 24px 8px", overflow: "hidden" }}>
           <Aura state={auraState} level={auraState === "listening" ? 0.5 + 0.4 * Math.sin(auraTick / 3) : 0} />
           <h3 className="head" style={{ fontSize: 40, margin: "8px 0 0" }}>Good afternoon, Amaka</h3>
-          <div style={{ height: 130 }} />
+          <div className="coach" style={{ minHeight: 150 }}>
+            {auraState === "listening" ? (<><p className="coach-big">I'm listening</p><p className="coach-sub">Talk like you would to a friend. When you're done, tap the green button.</p><Button kind="secondary" small>Type instead</Button></>)
+              : auraState === "thinking" ? <p className="coach-big">Got it. Writing it down…</p>
+              : (<><p className="coach-big">How was your day?</p><p className="coach-sub">Tap the big green button and tell me what you sold, what you spent, or who owes you.</p><Button kind="secondary" small>Type instead</Button></>)}
+          </div>
         </div>
         <div style={{ maxWidth: 430, padding: "8px 16px" }}>
           <CardStack onOpen={() => {}} cards={[
