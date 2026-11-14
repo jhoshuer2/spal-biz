@@ -59,6 +59,7 @@ Rules:
 - When you ask a question and two or three answers are likely, phrase it as a choice ("Did you mean 5,000 each, or 5,000 in all?") and put those answers in options, short and in her own words ("5,000 each", "5,000 in all"). The choices are tappable buttons for a busy owner, so keep each under 6 words. If there are no likely answers, options is null.
 - Ask at most ONE short friendly question (under 15 words, in her own style) when you cannot tell the amount, which record she means, or anything above. You may return actions and a question together when part of her note is clear. If her note is not about the shop at all, return no actions and ask what she meant.
 - Sometimes her note is a PHOTO: her notebook page, a receipt, a handwritten list of sales or debts, a price list, or a shelf. Read it like a careful assistant. Record only what is clearly written or shown; if a number or name is hard to read, do not guess: ask one short question about that part and record the rest. Dates written in the photo are occurred_on. Put a short plain-text copy of what you read in read (for example "2 rice 3000; Blessing owes 2500"), so she can see what you understood. For text and voice notes, read is null.
+- Her answer to your question may be something else entirely (a new sale, or "delete the last record"). Do what she now says; never insist on the old question.
 - confidence is 0 to 1: how sure you are you read it right.`;
 
 const lagosToday = () => {
@@ -189,7 +190,7 @@ export async function POST(req: Request) {
       await reportError(sb, shopId, "Correction history table is missing", { where: "parse", capture_id: capture.id });
       return NextResponse.json({ status: "needs_answer", lines: [], question: "I can't change saved records just yet. My setup isn't finished.", changed: false, reason: "history_missing" });
     }
-    if (!question) question = missed ? "Which one do you mean? Tell me a bit more." : "Sorry, I didn't catch that. How much was it?";
+    if (!question) question = missed ? "Which one do you mean? Tell me a bit more." : "I didn't quite get that. Tell me what you sold or spent, or who owes you, or ask me to fix or remove something.";
     return NextResponse.json({ status: "needs_answer", lines: [], question, options, read, changed: false });
   }
   await sb.from("capture").update({ status: "parsed" }).eq("id", capture.id);

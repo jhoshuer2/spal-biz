@@ -7,8 +7,8 @@ const SWITCH = "spal-speak"; // "on" | "off" | missing (Spal decides)
 const NOTES = "spal-notes"; // how many notes she has sent
 const INTRO = "spal-intro"; // how many times the how-to was spoken
 const MIC = "spal-mic-ok";
-export const NEW_FOR = 15; // notes, then Spal goes quiet unless she asked for it
-const INTRO_TIMES = 3;
+export const NEW_FOR = 30; // notes, then Spal goes quiet unless she asked for it
+
 
 const get = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const set = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode: fine */ } };
@@ -27,7 +27,8 @@ export function speakOn() {
 export const setSpeak = (on: boolean) => set(SWITCH, on ? "on" : "off");
 export const micKnown = () => get(MIC) === "1";
 export const rememberMic = () => set(MIC, "1");
-export const introDue = () => num(INTRO) < INTRO_TIMES;
+/** What Spal says before it starts listening: the full how-to the first two times, a short cue for the next few, then nothing. */
+export const cueFor = () => (num(INTRO) < 2 ? INTRO_TEXT : num(INTRO) < 8 ? "I'm listening." : null);
 export const introDone = () => set(INTRO, String(num(INTRO) + 1));
 
 /** Some phones refuse speech until it has been started from a tap. Call this inside the tap. */

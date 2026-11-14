@@ -11,7 +11,7 @@ import type { Shop } from "@/lib/supabase";
 import { supabaseBrowser } from "@/lib/supabase";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { micMessage, transcribe, useVoice } from "@/lib/voice";
-import { bumpNotes, introDone, introDue, INTRO_TEXT, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
+import { bumpNotes, cueFor, introDone, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
 import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
@@ -64,6 +64,9 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const [remind, setRemind] = useState<Remind | null>(null);
   const creating = useRef(false);
   const photoInput = useRef<HTMLInputElement>(null);
+  const startedAt = useRef(0);
+  const heard = useRef(false);
+  const [nudge, setNudge] = useState("");
   const [reading, setReading] = useState(false);
   const [anonymous, setAnonymous] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
@@ -78,6 +81,14 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const [now, setNow] = useState(() => new Date());
   const getToken = useCallback(async () => (await sb.auth.getSession()).data.session?.access_token ?? "", [sb]);
   const voice = useVoice(getToken);
+  // If she taps and then says nothing, say so in plain words. Shown, not spoken: Spal's voice would be recorded.
+  useEffect(() => {
+    if (voice.state !== "recording") { setNudge(""); return; }
+    const a = setTimeout(() => { if (!heard.current) setNudge("I'm listening. Go ahead and speak."); }, 7000);
+    const b = setTimeout(() => { if (!heard.current) setNudge("I can't hear you yet. Hold the phone closer, or tap Type instead."); }, 20000);
+    return () => { clearTimeout(a); clearTimeout(b); };
+  }, [voice.state]);
+  useEffect(() => { if (voice.level > 0.08) { heard.current = true; setNudge(""); } }, [voice.level]);
   const reminders = useReminders(sb, shop.id, getToken);
   useEffect(() => setNow(new Date()), []);
 
@@ -243,7 +254,10 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
 
   /** The big button: start listening, or stop and send what she said. She sees Spal react the instant she taps. */
   async function onTalk() {
-    if (voice.state === "recording") return stopAndSend();
+    if (voice.state === "recording") {
+      if (Date.now() - startedAt.current < 1500) return; // an accidental double tap must not end the recording
+      return stopAndSend();
+    }
     if (voice.state === "transcribing" || busy || starting) return;
     setErr(null);
     stopSpeaking();
@@ -253,19 +267,21 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     setTalkMode("voice");
     setStarting(true);
     // The first few times, Spal says how it works, then starts listening. Spoken before the mic opens so it is not recorded.
-    if (speakOn() && introDue() && micKnown()) { introDone(); setIntro(true); await speak(INTRO_TEXT); setIntro(false); }
+    const cue = speakOn() && micKnown() ? cueFor() : null;
+    if (cue) { introDone(); setIntro(true); await speak(cue); setIntro(false); }
     const r = await voice.start();
     setStarting(false);
-    if (r === "ok") rememberMic();
+    if (r === "ok") { rememberMic(); startedAt.current = Date.now(); heard.current = false; try { navigator.vibrate?.(40); } catch { /* not every phone */ } } // a small buzz says "now"
     else { setTalkMode("text"); setErr(micMessage(r)); reportError(sb, shop.id, "Microphone could not start", { reason: r, error: voice.lastError.current }, navigator.userAgent); }
   }
 
   async function stopAndSend() {
-    if (speakOn()) speak("Got it."); // answers the tap at once; the full reply follows when it is ready
+    if (speakOn() && heard.current) speak("Got it."); // answers the tap at once; the full reply follows when it is ready
     const r = await voice.finish();
     if ("error" in r && r.error === "offline" && r.blob) { await keepForLater({ kind: "note", blob: r.blob }); setTalk(false); setTalkMode("text"); return; }
     if ("error" in r) {
-      setErr(r.error === "empty" ? "I didn't hear anything. Tap the button and try again." : r.error === "limited" ? "That's a lot of talking for one day. You can still type to me." : "I couldn't hear that. You can type it instead.");
+      if (r.error === "empty") { setErr("I didn't hear anything. Tap the green button, wait for \"I'm listening\", then say it."); setTalk(false); setTalkMode("text"); return; }
+      setErr(r.error === "limited" ? "That's a lot of talking for one day. You can still type to me." : "I couldn't hear that. You can type it instead.");
       setTalkMode("text");
       return;
     }
@@ -401,8 +417,8 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
             <div className="coach" style={{ minHeight: hasToday || owing.length ? 120 : 150 }} aria-live="polite">
               {listening ? (
                 <>
-                  <p className="coach-big">I'm listening</p>
-                  <p className="coach-sub">Talk like you would to a friend. When you're done, tap the green button.</p>
+                  <p className="coach-big">{nudge ? "Go ahead, I'm here" : "I'm listening"}</p>
+                  <p className="coach-sub">{nudge || "Talk like you would to a friend. When you're done, tap the green button."}</p>
                   <div className="coach-actions">
                     <Button kind="secondary" small onClick={() => { voice.cancel(); setTalkMode("text"); }}>Type instead</Button>
                     <Button kind="secondary" small onClick={pickPhoto}>Add a photo</Button>
@@ -489,7 +505,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
                             {reply.options!.map((o) => <button key={o} className="chip choice" disabled={busy} onClick={() => send(o, `${reply.note} | Spal asked: ${reply.question}`)}>{o}</button>)}
                           </div>
                         )}
-                        <div style={{ marginTop: 12 }}><TextField value={answer} onChange={setAnswer} placeholder={(reply.options?.length ?? 0) > 0 ? "Or type it" : "Type here"} onSubmit={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} /></div>
+                        <div style={{ marginTop: 12 }}><TextField value={answer} onChange={setAnswer} placeholder={(reply.options?.length ?? 0) > 0 ? "Or say it your own way" : "Answer here, or tell me something else"} onSubmit={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} /></div>
                         <div style={{ marginTop: 12, display: "grid" }}><Button onClick={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} disabled={!answer.trim() || busy}>{busy ? "One moment" : "Send"}</Button></div>
                       </div>
                     )}
@@ -548,8 +564,9 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
       </div>
 
       <Sheet open={talk && talkMode === "text"} onClose={closeTalk} title="Tell Spal">
-        <h2 className="head" style={{ fontSize: 26, margin: "0 0 16px" }}>What happened?</h2>
-        <TextField value={note} onChange={setNote} onSubmit={() => send(note)} placeholder="Sold two tins of milk, ₦4,500" autoFocus
+        <h2 className="head" style={{ fontSize: 26, margin: "0 0 6px" }}>What should I do?</h2>
+        <p className="label" style={{ margin: "0 0 14px", fontSize: 17 }}>Tell me what you sold or spent, or who owes you. Or ask me to fix or remove something.</p>
+        <TextField value={note} onChange={setNote} onSubmit={() => send(note)} placeholder="Sold two tins of milk, ₦4,500, or: delete the last record" autoFocus
           onMic={voice.supported ? async () => { setErr(null); const r = await voice.start(); if (r === "ok") { setTalkMode("voice"); } else setErr(micMessage(r)); } : undefined} />
         {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
         <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
