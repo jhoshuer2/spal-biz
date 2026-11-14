@@ -15,3 +15,22 @@ export async function squarePhoto(file: File, size = 192): Promise<string> {
   bmp?.close();
   return c.toDataURL("image/jpeg", 0.82);
 }
+
+/** A photo of a page or receipt, shrunk to fit a phone connection but still readable (JPEG, longest side 1600px). */
+export async function readablePhoto(file: File, max = 1600): Promise<Blob> {
+  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions).catch(() => null);
+  const img = bmp ?? (await new Promise<HTMLImageElement>((res, rej) => {
+    const el = new Image();
+    el.onload = () => res(el);
+    el.onerror = () => rej(new Error("image"));
+    el.src = URL.createObjectURL(file);
+  }));
+  const w = "width" in img ? img.width : 0, h = "height" in img ? img.height : 0;
+  if (!w || !h) throw new Error("image");
+  const k = Math.min(1, max / Math.max(w, h));
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * k); c.height = Math.round(h * k);
+  c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+  bmp?.close();
+  return await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("image"))), "image/jpeg", 0.82));
+}

@@ -1,10 +1,10 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Aura, Button, DeltaPill, Icon, ListRow, Sheet, Toggle, Surface, TabBar, TalkButton, TextField, type Place } from "@/components/ui";
-import { parseCapture, sendNote, undoNote, type Reply } from "@/lib/capture";
+import { parseCapture, sendNote, sendPhoto, undoNote, type Reply } from "@/lib/capture";
 import { flush, newId, phoneStore, type NewItem, type OutboxItem } from "@/lib/outbox";
 import { clockLabel, dayKey, forDay, keyOf, learnCloseMinutes, minutesOf, salesOf, spentOf, timeOf, type DayEvent, type Summary } from "@/lib/day";
-import { squarePhoto } from "@/lib/image";
+import { readablePhoto, squarePhoto } from "@/lib/image";
 import { naira } from "@/lib/format";
 import type { Shop } from "@/lib/supabase";
 import { supabaseBrowser } from "@/lib/supabase";
@@ -62,6 +62,8 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const [learned, setLearned] = useState(minutesOf(shop.usual_close_time) != null);
   const [remind, setRemind] = useState<Remind | null>(null);
   const creating = useRef(false);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [reading, setReading] = useState(false);
   const [anonymous, setAnonymous] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -258,6 +260,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   }
 
   async function stopAndSend() {
+    if (speakOn()) speak("Got it."); // answers the tap at once; the full reply follows when it is ready
     const r = await voice.finish();
     if ("error" in r && r.error === "offline" && r.blob) { await keepForLater({ kind: "note", blob: r.blob }); setTalk(false); setTalkMode("text"); return; }
     if ("error" in r) {
@@ -267,6 +270,26 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     }
     await send(r.text, undefined, r.blob);
   }
+
+  /** A photo of her notebook, a receipt or a list, from the camera or the gallery. */
+  async function addPhoto(file?: File) {
+    if (!file || busy) return;
+    voice.cancel(); stopSpeaking(); unlockSpeech();
+    setTalk(false); setTalkMode("text"); setErr(null); setReply(null);
+    if (!online || offline) { setErr("I need signal to read a photo. Try again when you're back online."); return; }
+    setBusy(true); setReading(true);
+    if (speakOn()) speak("Let me read that.");
+    const blob = await readablePhoto(file).catch(() => null);
+    if (!blob) { setBusy(false); setReading(false); setErr("I couldn't open that photo. Please try another one."); return; }
+    const res = await sendPhoto(sb, shop.id, blob);
+    setBusy(false); setReading(false);
+    if (!res.reply) { setErr(res.failed === "offline" ? "I need signal to read a photo. Try again when you're back online." : "I couldn't keep that photo. Please try again."); return; }
+    setReply(res.reply);
+    if (res.reply.status !== "failed") bumpNotes();
+    if (speakOn()) { const s = replyToSay(res.reply); if (s) speak(s); }
+    refresh();
+  }
+  const pickPhoto = () => { voice.cancel(); setTalkMode("text"); setTalk(false); photoInput.current?.click(); };
 
   function closeTalk() {
     voice.cancel();
@@ -379,7 +402,10 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
                 <>
                   <p className="coach-big">I'm listening</p>
                   <p className="coach-sub">Talk like you would to a friend. When you're done, tap the green button.</p>
-                  <Button kind="secondary" small onClick={() => { voice.cancel(); setTalkMode("text"); }}>Type instead</Button>
+                  <div className="coach-actions">
+                    <Button kind="secondary" small onClick={() => { voice.cancel(); setTalkMode("text"); }}>Type instead</Button>
+                    <Button kind="secondary" small onClick={pickPhoto}>Add a photo</Button>
+                  </div>
                 </>
               ) : starting ? (
                 <>
@@ -387,13 +413,18 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
                   {intro && <Button kind="secondary" small onClick={() => stopSpeaking()}>Skip</Button>}
                 </>
               ) : busy || voice.state === "transcribing" ? (
-                <p className="coach-big">Got it. Writing it down…</p>
+                <p className="coach-big">{reading ? "Reading your photo…" : "Got it. Writing it down…"}</p>
               ) : isNewOwner() && !reply && !hasToday ? (
                 <>
                   <p className="coach-big">How was your day?</p>
                   <p className="coach-sub">Tap the big green button and tell me what you sold, what you spent, or who owes you.</p>
-                  <Button kind="secondary" small onClick={() => { setTalkMode("text"); setTalk(true); }}>Type instead</Button>
+                  <div className="coach-actions">
+                    <Button kind="secondary" small onClick={() => { setTalkMode("text"); setTalk(true); }}>Type instead</Button>
+                    <Button kind="secondary" small onClick={pickPhoto}>Add a photo</Button>
+                  </div>
                 </>
+              ) : err && !talk ? (
+                <p className="coach-sub" role="alert" style={{ color: "var(--care-text)" }}>{err}</p>
               ) : null}
             </div>
           </>
@@ -442,7 +473,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
                     {reply.lines.length > 0 && (
                       <>
                         <p className="label" style={{ margin: 0 }}>{reply.changed ? "Fixed" : "Got it"}</p>
-                        {reply.heard && <p className="label" style={{ margin: "4px 0 0", fontStyle: "italic" }}>I heard: “{reply.heard}”</p>}
+                        {reply.heard && <p className="label" style={{ margin: "4px 0 0", fontStyle: "italic" }}>{reply.photo ? "I read" : "I heard"}: “{reply.heard.length > 180 ? reply.heard.slice(0, 180) + "…" : reply.heard}”</p>}
                         <div style={{ marginTop: 8, display: "grid", gap: 6 }}>{reply.lines.map((l, i) => <p key={i} style={bigLine}>{l}</p>)}</div>
                       </>
                     )}
@@ -517,8 +548,12 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
         <TextField value={note} onChange={setNote} onSubmit={() => send(note)} placeholder="Sold two tins of milk, ₦4,500" autoFocus
           onMic={voice.supported ? async () => { setErr(null); const r = await voice.start(); if (r === "ok") { setTalkMode("voice"); } else setErr("I can't use the microphone. You can type instead."); } : undefined} />
         {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
-        <div style={{ marginTop: 16 }}><Button block onClick={() => send(note)} disabled={!note.trim() || busy}>{busy ? "One moment" : "Tell Spal"}</Button></div>
+        <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
+          <Button block onClick={() => send(note)} disabled={!note.trim() || busy}>{busy ? "One moment" : "Tell Spal"}</Button>
+          <Button block kind="ghost" onClick={pickPhoto}>Add a photo of your notebook or receipt</Button>
+        </div>
       </Sheet>
+      <input ref={photoInput} type="file" accept="image/*" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} onChange={(e) => { addPhoto(e.target.files?.[0]); e.target.value = ""; }} />
 
       <Sheet open={owedOpen} onClose={() => setOwedOpen(false)} title="Owed to you">
         <h2 className="head" style={{ fontSize: 26, margin: "0 0 4px" }}>Owed to you</h2>

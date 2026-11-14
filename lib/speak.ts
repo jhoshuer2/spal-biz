@@ -69,11 +69,11 @@ export function speak(text: string): Promise<boolean> {
   });
 }
 
-/** What Spal reads back after a note: the question if it has one, otherwise what it kept. */
+/** What Spal says when the answer arrives: short, because "Got it" was already said the moment she tapped. */
 export function replyToSay(r: { question: string | null; lines: string[]; status: string; changed?: boolean }) {
   if (r.status === "failed") return "I kept your note, but I couldn't read it just now.";
-  if (r.question) return r.lines.length ? `${r.lines[0]}. ${r.question}` : r.question;
+  if (r.question) return r.question;
   if (!r.lines.length) return "";
-  return `${r.changed ? "Fixed" : "Got it"}. ${r.lines.slice(0, 2).join(". ")}`;
+  return `${r.changed ? "Fixed. " : ""}${r.lines[0]}`;
 }
-export const INTRO_TEXT = "I'm listening. Tell me what you sold, what you spent, or who owes you. When you're done, tap the green button.";
+export const INTRO_TEXT = "I'm listening. Tell me what happened, then tap the green button when you're done.";

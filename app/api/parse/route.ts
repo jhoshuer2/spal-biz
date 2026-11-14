@@ -11,7 +11,7 @@ export const maxDuration = 30;
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 const nullable = (t: string) => ({ type: [t, "null"] });
 const SCHEMA = {
-  type: "object", additionalProperties: false, required: ["actions", "question", "options"],
+  type: "object", additionalProperties: false, required: ["actions", "question", "options", "read"],
   properties: {
     actions: {
       type: "array",
@@ -30,6 +30,7 @@ const SCHEMA = {
     },
     question: nullable("string"),
     options: { type: ["array", "null"], items: { type: "string" } },
+    read: nullable("string"),
   },
 } as const;
 
@@ -57,6 +58,7 @@ Rules:
 - If she is telling you about an earlier day ("yesterday", "last Tuesday", a date), set occurred_on (YYYY-MM-DD) on added records. Otherwise null. With a time and no day, the day is the day of her note.
 - When you ask a question and two or three answers are likely, phrase it as a choice ("Did you mean 5,000 each, or 5,000 in all?") and put those answers in options, short and in her own words ("5,000 each", "5,000 in all"). The choices are tappable buttons for a busy owner, so keep each under 6 words. If there are no likely answers, options is null.
 - Ask at most ONE short friendly question (under 15 words, in her own style) when you cannot tell the amount, which record she means, or anything above. You may return actions and a question together when part of her note is clear. If her note is not about the shop at all, return no actions and ask what she meant.
+- Sometimes her note is a PHOTO: her notebook page, a receipt, a handwritten list of sales or debts, a price list, or a shelf. Read it like a careful assistant. Record only what is clearly written or shown; if a number or name is hard to read, do not guess: ask one short question about that part and record the rest. Dates written in the photo are occurred_on. Put a short plain-text copy of what you read in read (for example "2 rice 3000; Blessing owes 2500"), so she can see what you understood. For text and voice notes, read is null.
 - confidence is 0 to 1: how sure you are you read it right.`;
 
 const lagosToday = () => {
@@ -83,9 +85,19 @@ export async function POST(req: Request) {
   if (limErr) console.warn("usage limit not active:", limErr.message);
   else if (within === false) return NextResponse.json({ status: "limited" }, { status: 429 });
 
-  const { data: capture } = await sb.from("capture").select("id, shop_id, text_content, transcript, created_at").eq("id", body.capture_id).maybeSingle();
+  const { data: capture } = await sb.from("capture").select("id, shop_id, kind, media_path, text_content, transcript, created_at").eq("id", body.capture_id).maybeSingle();
   if (!capture) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const note = (clean(capture.text_content) || clean(capture.transcript)).slice(0, 1500);
+  const isPhoto = capture.kind === "photo";
+  let photo: { data: string } | null = null;
+  if (isPhoto) {
+    if (!capture.media_path) return NextResponse.json({ error: "empty" }, { status: 400 });
+    const { data: ok } = await sb.rpc("bump_usage", { p_kind: "photo", p_max: 30 });
+    if (ok === false) return NextResponse.json({ status: "limited" }, { status: 429 });
+    const { data: file } = await sb.storage.from("captures").download(capture.media_path as string);
+    if (!file || file.size > 4_500_000) return NextResponse.json({ error: "empty" }, { status: 400 });
+    photo = { data: Buffer.from(await file.arrayBuffer()).toString("base64") };
+  }
+  const note = (clean(capture.text_content) || clean(capture.transcript) || (isPhoto ? "(She sent a photo.)" : "")).slice(0, 1500);
   if (!note) return NextResponse.json({ error: "empty" }, { status: 400 });
   const shopId = capture.shop_id as string;
 
@@ -117,9 +129,9 @@ export async function POST(req: Request) {
     const ask = (structured: boolean) => client.beta.messages.create({
       model: MODEL, max_tokens: 3000,
       betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
-      ...(structured ? { output_config: { effort: "low" as const, format: { type: "json_schema" as const, schema: SCHEMA as unknown as Record<string, unknown> } } } : { output_config: { effort: "low" as const } }),
+      ...(structured ? { output_config: { effort: (photo ? "medium" : "low") as "low" | "medium", format: { type: "json_schema" as const, schema: SCHEMA as unknown as Record<string, unknown> } } } : { output_config: { effort: (photo ? "medium" : "low") as "low" | "medium" } }),
       system: structured ? SYSTEM : `${SYSTEM}\n\nReply with ONLY a JSON object, no other text, shaped like: ${JSON.stringify(SCHEMA)}`,
-      messages: [{ role: "user", content: userMsg }],
+      messages: [{ role: "user", content: photo ? [{ type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: photo.data } }, { type: "text" as const, text: userMsg }] : userMsg }],
     });
     let res;
     try {
@@ -150,6 +162,8 @@ export async function POST(req: Request) {
   const itemIndex = new Map<string, string>();
   for (const i of items ?? []) [i.name, ...(i.aliases ?? [])].forEach((n: string) => itemIndex.set(norm(n), i.id));
 
+  const read = isPhoto ? clean(parsed.read).slice(0, 600) : "";
+  if (read) await sb.from("capture").update({ transcript: read }).eq("id", capture.id);
   const options = (parsed.options ?? []).map((o) => clean(o)).filter(Boolean).slice(0, 3);
   const { lines, changed, wrote, missed, touchedCustomers, boughtCustomers, historyFailed } = await applyActions(
     { sb, shopId, captureId: capture.id as string, capturedAt: capture.created_at as string, byRef, custName, itemName, custIndex, itemIndex }, parsed.actions ?? []);
@@ -176,8 +190,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: "needs_answer", lines: [], question: "I can't change saved records just yet. My setup isn't finished.", changed: false, reason: "history_missing" });
     }
     if (!question) question = missed ? "Which one do you mean? Tell me a bit more." : "Sorry, I didn't catch that. How much was it?";
-    return NextResponse.json({ status: "needs_answer", lines: [], question, options, changed: false });
+    return NextResponse.json({ status: "needs_answer", lines: [], question, options, read, changed: false });
   }
   await sb.from("capture").update({ status: "parsed" }).eq("id", capture.id);
-  return NextResponse.json({ status: "parsed", lines, question: question || null, options: question ? options : [], changed });
+  return NextResponse.json({ status: "parsed", lines, question: question || null, options: question ? options : [], read, changed });
 }

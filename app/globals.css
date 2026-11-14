@@ -328,3 +328,4 @@ html[data-boot="returning"] .boot-new { display: none !important; }
 .coach-big { margin: 0; font-family: var(--font-head); font-weight: 700; letter-spacing: -0.02em; font-size: 28px; line-height: 1.1; color: var(--mood-ink); }
 .coach-sub { margin: 0 0 6px; font-size: 18px; line-height: 1.35; color: var(--mood-ink-2); max-width: 360px; }
 .chip.choice { min-height: 48px; padding: 0 18px; font-size: 17px; background: var(--ink); color: var(--bg); font-weight: 600; }
+.coach-actions { display: flex; flex-wrap: wrap; gap: 8px; }

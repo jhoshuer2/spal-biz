@@ -1,18 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isNetworkError } from "./outbox";
 
-export type Reply = { captureId: string; note: string; heard?: string; lines: string[]; question: string | null; options?: string[]; status: "parsed" | "needs_answer" | "failed"; limited?: boolean; changed?: boolean; offline?: boolean };
+export type Reply = { captureId: string; note: string; heard?: string; lines: string[]; question: string | null; options?: string[]; photo?: boolean; status: "parsed" | "needs_answer" | "failed"; limited?: boolean; changed?: boolean; offline?: boolean };
 
 /** Ask Spal to understand a note that is already saved. */
-export async function parseCapture(sb: SupabaseClient, captureId: string, note: string, context?: string, heard?: string): Promise<Reply> {
-  const failed: Reply = { captureId, note, heard, lines: [], question: null, status: "failed" };
+export async function parseCapture(sb: SupabaseClient, captureId: string, note: string, context?: string, heard?: string, photo?: boolean): Promise<Reply> {
+  const failed: Reply = { captureId, note, heard, photo, lines: [], question: null, status: "failed" };
   try {
     const { data: { session } } = await sb.auth.getSession();
     const r = await fetch("/api/parse", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` }, body: JSON.stringify({ capture_id: captureId, context }) });
     if (r.status === 429) return { ...failed, limited: true };
     const j = await r.json();
     if (!r.ok || j.status === "failed") return failed;
-    return { captureId, note, heard, lines: j.lines ?? [], question: j.question ?? null, options: j.options ?? [], status: j.status, changed: !!j.changed };
+    const readText = photo ? (j.read as string | undefined) || note : undefined;
+    return { captureId, note: readText ?? note, heard: photo ? readText : heard, photo, lines: j.lines ?? [], question: j.question ?? null, options: j.options ?? [], status: j.status, changed: !!j.changed };
   } catch (e) {
     return { ...failed, offline: isNetworkError(e) };
   }
@@ -55,4 +56,16 @@ export async function undoNote(sb: SupabaseClient, captureId: string) {
   await sb.from("event").delete().eq("capture_id", captureId);
   await sb.from("event_history").delete().eq("capture_id", captureId);
   await sb.from("capture").update({ status: "new" }).eq("id", captureId);
+}
+
+/** A photo of her notebook, a receipt or a list: keep it, then ask Spal to read it. Needs signal. */
+export async function sendPhoto(sb: SupabaseClient, shopId: string, blob: Blob): Promise<{ reply?: Reply; failed?: "offline" | "keep" }> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return { failed: "offline" };
+  const { data: cap, error } = await sb.from("capture").insert({ shop_id: shopId, kind: "photo" }).select("id").single();
+  if (error || !cap) return { failed: isNetworkError(error) ? "offline" : "keep" };
+  const path = `${shopId}/${cap.id}.jpg`;
+  const { error: up } = await sb.storage.from("captures").upload(path, blob, { contentType: "image/jpeg" });
+  if (up) return { failed: isNetworkError(up) ? "offline" : "keep" };
+  await sb.from("capture").update({ media_path: path }).eq("id", cap.id);
+  return { reply: await parseCapture(sb, cap.id, "(She sent a photo.)", undefined, undefined, true) };
 }
