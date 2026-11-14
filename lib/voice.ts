@@ -2,6 +2,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isNetworkError } from "./outbox";
 
+export type MicFail = "denied" | "nomic" | "busy" | "unsupported" | "error";
+/** What to tell her when the microphone could not start, in words she can act on. */
+export function micMessage(r: MicFail) {
+  if (r === "denied") return "The microphone is blocked for Spal. Tap the lock beside the web address, choose Permissions, and allow Microphone. Or just type it.";
+  if (r === "nomic") return "This phone says it has no microphone. You can type it, or add a photo.";
+  if (r === "busy") return "Another app is using the microphone. Close it and try again, or type it.";
+  return "I couldn't start the microphone. You can type it, or add a photo.";
+}
+
 export type VoiceState = "idle" | "recording" | "transcribing";
 export type VoiceResult = { text: string; blob: Blob } | { error: "denied" | "unsupported" | "empty" | "failed" | "limited" | "offline"; blob?: Blob };
 
@@ -37,7 +46,8 @@ export function useVoice(getToken: () => Promise<string>) {
   }, []);
   useEffect(() => cleanup, [cleanup]);
 
-  const start = useCallback(async (): Promise<"ok" | "denied" | "unsupported"> => {
+  const lastError = useRef("");
+  const start = useCallback(async (): Promise<"ok" | MicFail> => {
     if (!supported) return "unsupported";
     try {
       const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
@@ -69,9 +79,14 @@ export function useVoice(getToken: () => Promise<string>) {
       timer.current = setTimeout(() => { rec.current?.state === "recording" && rec.current.stop(); }, MAX_MS);
       setState("recording");
       return "ok";
-    } catch {
+    } catch (e) {
       cleanup();
-      return "denied";
+      const name = (e as { name?: string })?.name ?? "";
+      lastError.current = `${name}: ${((e as { message?: string })?.message ?? "").slice(0, 120)}`;
+      if (name === "NotAllowedError" || name === "SecurityError") return "denied";
+      if (name === "NotFoundError" || name === "OverconstrainedError") return "nomic";
+      if (name === "NotReadableError" || name === "AbortError") return "busy";
+      return "error";
     }
   }, [supported, cleanup]);
 
@@ -102,7 +117,7 @@ export function useVoice(getToken: () => Promise<string>) {
     setState("idle");
   }, [cleanup]);
 
-  return { state, level, supported, start, finish, cancel };
+  return { state, level, supported, start, finish, cancel, lastError };
 }
 
 /** Turn a recording into words. `offline` keeps the recording so it can be sent later. */

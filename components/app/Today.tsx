@@ -4,12 +4,13 @@ import { Aura, Button, DeltaPill, Icon, ListRow, Sheet, Toggle, Surface, TabBar,
 import { parseCapture, sendNote, sendPhoto, undoNote, type Reply } from "@/lib/capture";
 import { flush, newId, phoneStore, type NewItem, type OutboxItem } from "@/lib/outbox";
 import { clockLabel, dayKey, forDay, keyOf, learnCloseMinutes, minutesOf, salesOf, spentOf, timeOf, type DayEvent, type Summary } from "@/lib/day";
+import { reportError } from "@/lib/report";
 import { readablePhoto, squarePhoto } from "@/lib/image";
 import { naira } from "@/lib/format";
 import type { Shop } from "@/lib/supabase";
 import { supabaseBrowser } from "@/lib/supabase";
 import { useTheme, type ThemeMode } from "@/lib/theme";
-import { transcribe, useVoice } from "@/lib/voice";
+import { micMessage, transcribe, useVoice } from "@/lib/voice";
 import { bumpNotes, introDone, introDue, INTRO_TEXT, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
 import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
@@ -256,7 +257,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     const r = await voice.start();
     setStarting(false);
     if (r === "ok") rememberMic();
-    else { setTalkMode("text"); setErr("I can't use the microphone. You can type instead."); }
+    else { setTalkMode("text"); setErr(micMessage(r)); reportError(sb, shop.id, "Microphone could not start", { reason: r, error: voice.lastError.current }, navigator.userAgent); }
   }
 
   async function stopAndSend() {
@@ -549,7 +550,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
       <Sheet open={talk && talkMode === "text"} onClose={closeTalk} title="Tell Spal">
         <h2 className="head" style={{ fontSize: 26, margin: "0 0 16px" }}>What happened?</h2>
         <TextField value={note} onChange={setNote} onSubmit={() => send(note)} placeholder="Sold two tins of milk, ₦4,500" autoFocus
-          onMic={voice.supported ? async () => { setErr(null); const r = await voice.start(); if (r === "ok") { setTalkMode("voice"); } else setErr("I can't use the microphone. You can type instead."); } : undefined} />
+          onMic={voice.supported ? async () => { setErr(null); const r = await voice.start(); if (r === "ok") { setTalkMode("voice"); } else setErr(micMessage(r)); } : undefined} />
         {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
         <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
           <Button block onClick={() => send(note)} disabled={!note.trim() || busy}>{busy ? "One moment" : "Tell Spal"}</Button>

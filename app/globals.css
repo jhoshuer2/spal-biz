@@ -236,8 +236,11 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 
 /* ============ Sheet ============ */
 .scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 40; animation: fade 0.2s ease-out; }
-.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; margin: 0 auto; max-width: 560px; background: var(--surface); border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: 12px 20px 28px; max-height: 88dvh; overflow-y: auto; overscroll-behavior: contain; animation: rise 0.25s ease-out; }
-.sheet .handle { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 16px; background: var(--ink-3); opacity: 0.4; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; margin: 0 auto; max-width: 560px; background: var(--surface); border-radius: var(--r-sheet) var(--r-sheet) 0 0; max-height: 88dvh; display: flex; flex-direction: column; overflow: hidden; animation: rise 0.25s ease-out; }
+.sheet-grab { flex: none; position: relative; padding: 12px 20px 6px; min-height: 52px; touch-action: none; cursor: grab; }
+.sheet .handle { width: 44px; height: 5px; border-radius: 3px; margin: 4px auto 0; background: var(--ink-3); opacity: 0.45; }
+.sheet-close { position: absolute; right: 12px; top: 6px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--surface-2); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 20px 28px; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes rise { from { transform: translateY(24px); opacity: 0; } }
 
@@ -272,7 +275,7 @@ button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-c
 .tap-card:active { transform: scale(0.99); }
 
 /* Day details: the Sold and Spent tiles stay in view while the list scrolls */
-.day-sticky { position: sticky; top: -12px; z-index: 2; background: var(--surface); margin: -12px -20px 0; padding: 12px 20px 12px; box-shadow: 0 1px 0 var(--line); }
+.day-sticky { position: sticky; top: -4px; z-index: 2; background: var(--surface); margin: -4px -20px 0; padding: 12px 20px 12px; box-shadow: 0 1px 0 var(--line); }
 .day-tile { text-align: left; border: 0; font: inherit; color: var(--ink); background: var(--surface-2); border-radius: 18px; padding: 14px 16px; display: block; min-height: 96px; transition: transform 0.12s ease-out, background 0.15s; }
 .day-tile:active { transform: scale(0.98); }
 .day-tile[aria-pressed="true"] { background: var(--ink); color: var(--bg); }

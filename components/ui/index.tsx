@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Icon } from "./Icon";
 export { Icon } from "./Icon";
 export { Orb } from "./Orb";
@@ -89,26 +89,70 @@ export function TabBar({ place, onPlace, listening, level, onTalk }: { place: Pl
   );
 }
 
+// The phone's Back button closes the top sheet instead of leaving the app. One listener, a stack of open sheets.
+const openSheets: { close: () => void }[] = [];
+let skipPops = 0, popListening = false;
+function ensurePopListener() {
+  if (popListening || typeof window === "undefined") return;
+  popListening = true;
+  window.addEventListener("popstate", () => {
+    if (skipPops > 0) { skipPops--; return; }
+    openSheets.pop()?.close();
+  });
+}
+
 export function Sheet({ open, onClose, title, children, layer = 0 }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; layer?: number }) {
+  const sheet = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+
   useEffect(() => {
     if (!open) return;
-    const h = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const h = (e: KeyboardEvent) => e.key === "Escape" && close.current();
     window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [open, onClose]);
+    ensurePopListener();
+    const entry = { close: () => close.current() };
+    openSheets.push(entry);
+    try { history.pushState(history.state, ""); } catch { /* ignore */ }
+    return () => {
+      window.removeEventListener("keydown", h);
+      const i = openSheets.indexOf(entry);
+      if (i >= 0) { openSheets.splice(i, 1); skipPops++; try { history.back(); } catch { skipPops--; } } // closed another way: take back our history step
+    };
+  }, [open]);
+
+  // Swipe the top bar down to close. Quick flicks count too.
+  const drag = useRef<{ y: number; t: number; dy: number } | null>(null);
+  const down = (e: React.PointerEvent) => { drag.current = { y: e.clientY, t: Date.now(), dy: 0 }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); if (sheet.current) sheet.current.style.transition = "none"; };
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current; if (!d || !sheet.current) return;
+    d.dy = Math.max(0, e.clientY - d.y);
+    sheet.current.style.transform = `translateY(${d.dy}px)`;
+  };
+  const up = () => {
+    const d = drag.current; drag.current = null;
+    const el = sheet.current; if (!d || !el) return;
+    const fast = d.dy / Math.max(1, Date.now() - d.t) > 0.5;
+    el.style.transition = "transform 0.2s ease-out";
+    if (d.dy > 90 || (fast && d.dy > 50)) { el.style.transform = "translateY(100%)"; setTimeout(() => close.current(), 160); }
+    else el.style.transform = "";
+  };
+
   if (!open) return null;
   return (
     <>
       <div className="scrim" style={{ zIndex: 40 + layer * 2 }} onClick={onClose} />
-      <div className="sheet" style={{ zIndex: 41 + layer * 2 }} role="dialog" aria-modal="true" aria-label={title}>
-        <div className="handle" />
-        {children}
+      <div ref={sheet} className="sheet" style={{ zIndex: 41 + layer * 2 }} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="sheet-grab" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+          <div className="handle" />
+          <button className="sheet-close" aria-label="Close" onPointerDown={(e) => e.stopPropagation()} onClick={onClose}><Icon name="x" size={22} /></button>
+        </div>
+        <div className="sheet-body">{children}</div>
       </div>
     </>
   );
 }
 
-/** What Spal wants to do, in her voice. She sees the exact message before anything is sent. */
 export function ProposalCard({ title, draft, onYes, onChange, onLater }: { title: string; draft: string; onYes?: () => void; onChange?: () => void; onLater?: () => void }) {
   const [sent, setSent] = useState(false);
   return (

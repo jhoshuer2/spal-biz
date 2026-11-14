@@ -4,7 +4,7 @@ import { Button, DeltaPill, Icon, Orb, Roll, Surface, TextField } from "@/compon
 import { naira } from "@/lib/format";
 import { closingCase, countOf, salesOf, summarize, type DayEvent, type Summary } from "@/lib/day";
 import { sendNote, undoNote, type Reply } from "@/lib/capture";
-import { useVoice } from "@/lib/voice";
+import { micMessage, useVoice } from "@/lib/voice";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Props = {
@@ -54,7 +54,7 @@ export function Closing({ sb, getToken, shopId, ownerFirst, today, recent, today
     }
     if (voice.state !== "idle") return;
     const r = await voice.start();
-    if (r !== "ok") setErr("I can't use the microphone. You can type instead.");
+    if (r !== "ok") setErr(micMessage(r));
   }
 
   async function submit(text?: string, voiceBlob?: Blob) {
