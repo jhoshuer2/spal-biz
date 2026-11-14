@@ -414,18 +414,21 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
                 </>
               ) : busy || voice.state === "transcribing" ? (
                 <p className="coach-big">{reading ? "Reading your photo…" : "Got it. Writing it down…"}</p>
-              ) : isNewOwner() && !reply && !hasToday ? (
+              ) : (
                 <>
-                  <p className="coach-big">How was your day?</p>
-                  <p className="coach-sub">Tap the big green button and tell me what you sold, what you spent, or who owes you.</p>
+                  {isNewOwner() && !reply && !hasToday && (
+                    <>
+                      <p className="coach-big">How was your day?</p>
+                      <p className="coach-sub">Tap the big green button and tell me what you sold, what you spent, or who owes you.</p>
+                    </>
+                  )}
+                  {err && !talk && <p className="coach-sub" role="alert" style={{ color: "var(--care-text)" }}>{err}</p>}
                   <div className="coach-actions">
                     <Button kind="secondary" small onClick={() => { setTalkMode("text"); setTalk(true); }}>Type instead</Button>
                     <Button kind="secondary" small onClick={pickPhoto}>Add a photo</Button>
                   </div>
                 </>
-              ) : err && !talk ? (
-                <p className="coach-sub" role="alert" style={{ color: "var(--care-text)" }}>{err}</p>
-              ) : null}
+              )}
             </div>
           </>
         ) : (
