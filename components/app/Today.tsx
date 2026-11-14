@@ -38,6 +38,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const [starting, setStarting] = useState(false);
   const [intro, setIntro] = useState(false);
   const [speaksOn, setSpeaksOn] = useState(false);
+  const [voiceTest, setVoiceTest] = useState<"" | "playing" | "silent" | "ok">("");
   useEffect(() => { setSpeaksOn(speakOn()); }, []);
   const [detailTab, setDetailTab] = useState<Tab | undefined>(undefined);
   const [owedOpen, setOwedOpen] = useState(false);
@@ -546,6 +547,10 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
         <ProfileReminders r={reminders} />
         <p className="label" style={{ margin: "16px 0 4px" }}>Spal's voice</p>
         <div className="row"><span>Spal talks back to me</span><Toggle checked={speaksOn} label="Spal talks back to me" onChange={(v) => { setSpeak(v); setSpeaksOn(v); if (!v) stopSpeaking(); }} /></div>
+        <div className="row" style={{ alignItems: "flex-start", gap: 12 }}>
+          <span>Hear Spal's voice{voiceTest === "silent" && <span className="label" style={{ display: "block", fontSize: 15, marginTop: 4 }}>Nothing played. Check the phone isn't on silent and the volume is up. Some phones can't do this, and Spal will keep showing everything in writing.</span>}</span>
+          <Button kind="secondary" small disabled={voiceTest === "playing"} onClick={async () => { unlockSpeech(); setVoiceTest("playing"); const ok = await speak("Hello, I'm Spal. Can you hear me? Tap the green button and tell me about your day."); setVoiceTest(ok ? "ok" : "silent"); }}>{voiceTest === "playing" ? "Playing…" : "Play"}</Button>
+        </div>
         <p className="label" style={{ margin: "16px 0 4px" }}>Your data</p>
         <button className="row" onClick={() => { setProfile(false); setDataOpen(true); }}><span>Download or delete my data</span><Icon name="chevron" size={20} /></button>
         <p className="label" style={{ margin: "16px 0 4px" }}>Help</p>

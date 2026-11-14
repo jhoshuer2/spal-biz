@@ -46,23 +46,26 @@ function pickVoice() {
 
 export function stopSpeaking() { if (canSpeak()) try { window.speechSynthesis.cancel(); } catch { /* ignore */ } }
 
-/** Say it. Resolves when finished (or after a safety timeout, because some phones never say they are done). */
-export function speak(text: string): Promise<void> {
-  if (!canSpeak()) return Promise.resolve();
+/** Say it. Resolves true if the phone really started speaking, false if it stayed silent (blocked, muted, no voice). */
+export function speak(text: string): Promise<boolean> {
+  if (!canSpeak()) return Promise.resolve(false);
   return new Promise((resolve) => {
     try {
-      window.speechSynthesis.cancel();
+      const synth = window.speechSynthesis;
+      synth.cancel();
       const s = say(text);
       const u = new SpeechSynthesisUtterance(s);
       const voice = pickVoice();
       if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = "en-GB";
       u.rate = 0.95;
-      let done = false;
-      const end = () => { if (!done) { done = true; clearTimeout(timer); resolve(); } };
+      let started = false, done = false;
+      const end = () => { if (!done) { done = true; clearTimeout(timer); resolve(started); } };
       const timer = setTimeout(end, Math.min(12_000, 2500 + s.length * 85));
+      u.onstart = () => { started = true; };
       u.onend = end; u.onerror = end;
-      window.speechSynthesis.speak(u);
-    } catch { resolve(); }
+      // a short pause after cancel(), and resume(), because some phones drop speech started in the same breath
+      setTimeout(() => { try { synth.resume(); synth.speak(u); } catch { end(); } }, 80);
+    } catch { resolve(false); }
   });
 }
 
