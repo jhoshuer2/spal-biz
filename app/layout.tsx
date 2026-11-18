@@ -31,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" data-theme="auto" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://challenges.cloudflare.com" />
+        <link rel="preload" as="image" href="/spal/face.webp" type="image/webp" />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <script dangerouslySetInnerHTML={{ __html: earlyScript }} />
       </head>

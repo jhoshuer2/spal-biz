@@ -216,6 +216,14 @@ Direction from Joshua, 2026-11-18, after studying Praktika: the conversation is 
 - **Closing the day** ends with "Added to your book today": what was kept and which of the last seven days she closed, with rest days allowed. Never guilt.
 - **Gentle failure.** No speech: a "No speech detected" toast plus a friendly line from Spal, never an error box.
 
+## 11b. Onboarding: meeting Spal
+
+Short on purpose: a welcome, then three questions, then straight into the first conversation. No quiz, no stats, no permission pop-ups at the door.
+
+- **Welcome** (`components/app/Onboarding.tsx`): Spal's face fills the top, one headline ("Your shop's assistant"), one promise line, **Get started** and **I already use Spal**.
+- **Three questions asked by Spal's face**, each a bubble under a compact face with a progress bar and back arrow: her name, what she sells (tap up to three tiles, "Something else" to type), her shop's name (optional, defaults to "Name's shop"). Spal says each question out loud from recorded lines in `public/spal/voice/` (the tap on the previous button lets the phone play sound), and the talking clip plays while she speaks.
+- Her private account is made quietly when she taps **Let's go**. Microphone and reminder permissions are asked later, in context, never here.
+
 ## 12. Guidance and feedback (new owners first)
 
 Most owners are not technical. Spal always says what is happening and what to do next, in plain words, so she is never left wondering.

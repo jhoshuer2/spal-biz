@@ -140,6 +140,14 @@ export async function speak(text: string): Promise<boolean> {
   return phoneVoice(s);
 }
 
+/** Play a recorded line that ships with the app (used before she has an account, when the server voice is not available). */
+export async function playLine(src: string): Promise<boolean> {
+  if (!canSpeak() || !speakOn()) return false;
+  stopSpeaking();
+  const mine = gen;
+  return play(src, mine);
+}
+
 /** Speak now; if the phone blocks sound until she touches it, say so through `waiting` and speak on her first touch (unless she is pressing the talk button, which speaks for itself). */
 export function speakWhenAllowed(text: string, waiting?: (w: boolean) => void) {
   speak(text).then((ok) => {

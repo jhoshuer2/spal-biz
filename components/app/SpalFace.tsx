@@ -10,8 +10,8 @@ export type Pill = { id: string; label: string; value: string };
  * Spal's face, with the conversation below it. The face breathes when idle, glows with her voice while she speaks,
  * and shows when Spal is thinking or talking. The day's three numbers sit on the face as taps.
  */
-export function SpalFace({ state, level, evening, pills, onPill, header, talkingOverride }: {
-  state: FaceState; level: number; evening: boolean; pills: Pill[]; onPill: (id: string) => void; header: React.ReactNode; talkingOverride?: boolean;
+export function SpalFace({ state, level, evening, pills, onPill, header, talkingOverride, size = "normal", status = true }: {
+  state: FaceState; level: number; evening: boolean; pills: Pill[]; onPill: (id: string) => void; header?: React.ReactNode; talkingOverride?: boolean; size?: "hero" | "normal" | "compact"; status?: boolean;
 }) {
   const [heardTalking, setTalking] = useState(false);
   useEffect(() => onSpeaking(setTalking), []);
@@ -37,12 +37,12 @@ export function SpalFace({ state, level, evening, pills, onPill, header, talking
   const label = mode === "listening" ? "Listening" : mode === "speaking" ? "Speaking" : mode === "thinking" ? "Thinking" : "Spal";
 
   return (
-    <section className="face" data-mode={mode} style={{ ["--lv" as string]: String(Math.min(1, level)) }} aria-label="Spal">
+    <section className="face" data-size={size} data-mode={mode} style={{ ["--lv" as string]: String(Math.min(1, level)) }} aria-label="Spal">
       <img className="face-img" src="/spal/face.webp" alt="" width={960} height={540} decoding="async" />
       <video ref={video} className="face-video" data-on={talking && ready} muted loop playsInline preload="none" aria-hidden="true" onCanPlay={() => setReady(true)} />
       <div className="face-aura"><Aura tone={evening ? "indigo" : "lilac"} state={state} level={level} /></div>
-      <div className="face-top">{header}</div>
-      <div className="face-status" role="status"><i />{label}</div>
+      {header && <div className="face-top">{header}</div>}
+      {status && <div className="face-status" role="status"><i />{label}</div>}
       {pills.length > 0 && (
         <div className="face-pills">
           {pills.map((p) => <button key={p.id} className="face-pill" onClick={() => onPill(p.id)}><span>{p.label}</span><strong>{p.value}</strong></button>)}
