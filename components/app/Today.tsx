@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Aura, Button, DeltaPill, Icon, ListRow, Sheet, Toggle, Surface, TabBar, TalkButton, TextField, type Place } from "@/components/ui";
+import { Aura, Button, DeltaPill, Icon, ListRow, Logo, Sheet, Toggle, Surface, type Place } from "@/components/ui";
 import { parseCapture, sendNote, sendPhoto, undoNote, type Reply } from "@/lib/capture";
 import { flush, newId, phoneStore, type NewItem, type OutboxItem } from "@/lib/outbox";
 import { clockLabel, dayKey, forDay, keyOf, learnCloseMinutes, minutesOf, salesOf, spentOf, timeOf, type DayEvent, type Summary } from "@/lib/day";
@@ -11,7 +11,9 @@ import type { Shop } from "@/lib/supabase";
 import { supabaseBrowser } from "@/lib/supabase";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { micMessage, transcribe, useVoice } from "@/lib/voice";
-import { Chat } from "./Chat";
+import { Thread, type Live } from "./Thread";
+import { Dock } from "./Dock";
+import { chatHistory, loadThread, mid, saveThread, type Msg } from "@/lib/thread";
 import { bumpNotes, cueFor, introDone, isIOS, setupSpeech, speakWhenAllowed, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
 import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
@@ -37,9 +39,14 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const { mode, setMode } = useTheme();
   const sb = supabaseBrowser();
   const [place, setPlace] = useState<Place>("today");
-  const [talk, setTalk] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [toast, setToast] = useState("");
+  const [phase, setPhase] = useState<"note" | "chat" | "photo">("note");
+  const [msgs, setMsgs] = useState<Msg[]>(() => (typeof window === "undefined" ? [] : loadThread(shop.id, dayKey(new Date()))));
+  const msgsRef = useRef(msgs);
+  msgsRef.current = msgs;
   const [starting, setStarting] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   const [greetWaiting, setGreetWaiting] = useState(false);
   const greetLine = useRef("");
   const [loaded, setLoaded] = useState(false);
@@ -51,11 +58,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const [owedOpen, setOwedOpen] = useState(false);
   const [profile, setProfile] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [reply, setReply] = useState<Reply | null>(null);
-  const [answer, setAnswer] = useState("");
-  const [err, setErr] = useState<string | null>(null);
   const [recent, setRecent] = useState<DayEvent[]>([]);
   const [owing, setOwing] = useState<Owing[]>([]);
   const [itemNames, setItemNames] = useState<Map<string, string>>(new Map());
@@ -69,11 +72,11 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const [learned, setLearned] = useState(minutesOf(shop.usual_close_time) != null);
   const [remind, setRemind] = useState<Remind | null>(null);
   const creating = useRef(false);
-  const photoInput = useRef<HTMLInputElement>(null);
+  const camInput = useRef<HTMLInputElement>(null);
+  const galInput = useRef<HTMLInputElement>(null);
   const startedAt = useRef(0);
   const heard = useRef(false);
   const [nudge, setNudge] = useState("");
-  const [reading, setReading] = useState(false);
   const [anonymous, setAnonymous] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -83,7 +86,6 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const [queued, setQueued] = useState(0);
   const [online, setOnline] = useState(true);
   const flushing = useRef(false);
-  const [talkMode, setTalkMode] = useState<"voice" | "text">("text");
   const [now, setNow] = useState(() => new Date());
   const getToken = useCallback(async () => (await sb.auth.getSession()).data.session?.access_token ?? "", [sb]);
   const voice = useVoice(getToken);
@@ -113,7 +115,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
       sb.from("debt").select("customer_id, owed_kobo, next_due"),
       sb.from("customer").select("id, name, phone"),
       sb.from("item").select("id, name"),
-      sb.from("day_close").select("day, total_kobo, summary").order("day", { ascending: false }).limit(3),
+      sb.from("day_close").select("day, total_kobo, summary").order("day", { ascending: false }).limit(14),
       sb.from("proposal").select("id, customer_id, kind, draft_text, status, created_at").in("kind", ["debt_reminder", "win_back"]).gte("created_at", props.toISOString()),
       sb.from("event").select("customer_id, note, item_id").eq("kind", "credit_sale").order("occurred_at", { ascending: false }).limit(200),
       sb.from("event").select("customer_id, occurred_at, item_id").in("kind", ["sale", "credit_sale"]).not("customer_id", "is", null).gte("occurred_at", new Date(Date.now() - 120 * 86_400_000).toISOString()).limit(3000),
@@ -246,47 +248,86 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   // Spal speaks first: a greeting once each time the app is opened. If the phone blocks sound until a tap, it waits for her first touch.
   useEffect(() => { setupSpeech(getToken, (what, ctx) => { reportError(sb, shop.id, what, ctx, navigator.userAgent); }); }, [getToken, sb, shop.id]);
   useEffect(() => {
-    if (!loaded || greeted || !speakOn()) return;
+    if (!loaded || greeted) return;
     greeted = true;
     const g = `${greeting(hour)}, ${first}.`;
     const line = evening && !closedToday ? `${g} How did sales go today?`
       : hasToday && sales > 0 ? `${g} You've sold ${naira(sales)} so far today.`
-      : isNewOwner() ? `${g} How was your day? Tap the green button to tell me, or tap Chat with Spal to ask me anything.`
+      : isNewOwner() ? `${g} How was your day?`
       : lastClose?.total_kobo ? `${g} Yesterday was ${naira(lastClose.total_kobo)}. Let's beat it today.`
       : `${g} How's business today?`;
-    greetLine.current = line;
-    speakWhenAllowed(line, setGreetWaiting);
+    const first_ = !msgsRef.current.some((m) => m.kind === "you");
+    add({ id: mid(), kind: "spal", text: line, greet: true },
+      ...(isNewOwner() && first_ ? [{ id: mid(), kind: "spal" as const, text: "Tap the big green button and tell me what you sold, what you spent, or who owes you. Tap + to type or send a photo. And if you just want to chat, ask me anything." }] : []));
+    if (speakOn()) speakWhenAllowed(line, setGreetWaiting);
   }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function send(text: string, context?: string, voiceBlob?: Blob) {
+  const add = useCallback((...m: Msg[]) => setMsgs((cur) => [...cur, ...m]), []);
+  const notice = (text: string) => add({ id: mid(), kind: "notice", text });
+  const showToast = (text: string) => { setToast(text); setTimeout(() => setToast(""), 3000); };
+
+  // The conversation is kept on the phone for the day.
+  useEffect(() => { saveThread(shop.id, todayKey, msgs); }, [msgs, shop.id, todayKey]);
+
+  /** What she says, from the mic or the keyboard. Spal works out whether to keep it, fix something, or just answer. */
+  async function submit(text: string, via: "voice" | "text", voiceBlob?: Blob, explicitContext?: string) {
     const t = text.trim();
     if (!t || busy) return;
-    setBusy(true);
-    setErr(null);
+    const pending = [...msgsRef.current].reverse().find((m): m is Extract<Msg, { kind: "ask" }> => m.kind === "ask" && !m.answered && !m.retry);
+    const context = explicitContext ?? (pending ? `${pending.note} | Spal asked: ${pending.question}` : undefined);
+    setMsgs((cur) => [...cur.map((m) => (m.kind === "ask" && !m.answered && !m.retry ? { ...m, answered: true } : m)), { id: mid(), kind: "you", text: t, via }]);
+    setBusy(true); setPhase("note");
     const { reply: r, keepFailed, offline: gone } = await sendNote(sb, shop.id, t, context, voiceBlob ? { blob: voiceBlob } : undefined);
+    if (gone) { await keepForLater({ kind: "note", text: t, blob: voiceBlob, context }); setBusy(false); notice("No signal. I've kept that on your phone and I'll read it when you're back online."); return; }
+    if (keepFailed || !r) { setBusy(false); notice("I couldn't keep that. Please try again."); return; }
+    if (r.offline) { await keepForLater({ kind: "parse", captureId: r.captureId, text: r.note, context }); setBusy(false); notice("No signal. I've kept that on your phone and I'll read it when you're back online."); return; }
+    await handleReply(r, t);
+  }
+
+  async function handleReply(r: Reply, said: string) {
+    if (r.status === "chat") { await chat(); return; }
     setBusy(false);
-    if (gone) { await keepForLater({ kind: "note", text: t, blob: voiceBlob, context }); setNote(""); setAnswer(""); setTalk(false); setReply(null); return; }
-    if (keepFailed || !r) { setErr("I couldn't keep that. Please try again."); return; }
-    if (r.offline) { await keepForLater({ kind: "parse", captureId: r.captureId, text: r.note, context }); setNote(""); setAnswer(""); setTalk(false); setReply(null); return; }
-    setNote(""); setAnswer(""); setTalk(false); setReply(r);
+    if (r.status === "failed") {
+      add({ id: mid(), kind: "ask", question: r.limited ? "That's a lot for one day. I've kept your note and we'll carry on tomorrow." : "I kept your note, but I couldn't read it just now.", options: r.limited ? [] : ["Try again"], note: said, retry: { captureId: r.captureId, note: r.note, heard: r.heard } });
+      return;
+    }
     bumpNotes();
+    const out: Msg[] = [];
+    if (r.lines.length) out.push({ id: mid(), kind: "result", lines: r.lines, changed: r.changed, heard: r.heard, photo: r.photo, captureId: r.captureId });
+    if (r.question) out.push({ id: mid(), kind: "ask", question: r.question, options: r.options ?? [], note: said || r.note });
+    if (out.length) add(...out);
     if (speakOn()) { const s = replyToSay(r); if (s) speak(s); }
     refresh();
   }
 
+  /** Not something to keep: she asked a question or is just talking. Spal answers from her real numbers. */
+  async function chat() {
+    setBusy(true); setPhase("chat");
+    try {
+      const history = chatHistory(msgsRef.current);
+      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await getToken()}` }, body: JSON.stringify({ messages: history }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 429) add({ id: mid(), kind: "spal", text: "We've talked a lot today! I'll be fresh again tomorrow. You can still record your sales with the green button." });
+      else if (!r.ok || !j.reply) throw new Error("chat");
+      else { add({ id: mid(), kind: "spal", text: j.reply as string }); if (speakOn()) speak(j.reply as string); }
+    } catch {
+      notice(navigator.onLine === false ? "I need signal to chat. Try again when you're back online." : "I couldn't answer just now. Please try again.");
+    }
+    setBusy(false);
+  }
+
   /** The big button: start listening, or stop and send what she said. She sees Spal react the instant she taps. */
   async function onTalk() {
+    if (place !== "today") setPlace("today");
     if (voice.state === "recording") {
       if (Date.now() - startedAt.current < 1500) return; // an accidental double tap must not end the recording
       return stopAndSend();
     }
     if (voice.state === "transcribing" || busy || starting) return;
-    setErr(null);
     stopSpeaking();
     unlockSpeech();
-    setTalk(true);
-    if (!voice.supported) { setTalkMode("text"); return; }
-    setTalkMode("voice");
+    setTyping(false);
+    if (!voice.supported) { notice("This phone can't record in the browser. Tap + and choose Type, or send a photo."); return; }
     setStarting(true);
     // The first few times, Spal says how it works, then starts listening. Spoken before the mic opens so it is not recorded.
     const cue = speakOn() && (micKnown() || !isIOS()) ? cueFor() : null; // iPhones need the mic permission asked from the tap itself
@@ -294,45 +335,64 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     const r = await voice.start();
     setStarting(false);
     if (r === "ok") { rememberMic(); startedAt.current = Date.now(); heard.current = false; try { navigator.vibrate?.(40); } catch { /* not every phone */ } } // a small buzz says "now"
-    else { setTalkMode("text"); setErr(micMessage(r)); reportError(sb, shop.id, "Microphone could not start", { reason: r, error: voice.lastError.current }, navigator.userAgent); }
+    else { notice(micMessage(r)); reportError(sb, shop.id, "Microphone could not start", { reason: r, error: voice.lastError.current }, navigator.userAgent); }
   }
 
   async function stopAndSend() {
     if (speakOn() && heard.current) speak("Got it."); // answers the tap at once; the full reply follows when it is ready
     const r = await voice.finish();
-    if ("error" in r && r.error === "offline" && r.blob) { await keepForLater({ kind: "note", blob: r.blob }); setTalk(false); setTalkMode("text"); return; }
+    if ("error" in r && r.error === "offline" && r.blob) { await keepForLater({ kind: "note", blob: r.blob }); notice("No signal. I've kept your voice note on your phone and I'll read it when you're back online."); return; }
     if ("error" in r) {
-      if (r.error === "empty") { setErr("I didn't hear anything. Tap the green button, wait for \"I'm listening\", then say it."); setTalk(false); setTalkMode("text"); return; }
-      setErr(r.error === "limited" ? "That's a lot of talking for one day. You can still type to me." : "I couldn't hear that. You can type it instead.");
-      setTalkMode("text");
+      if (r.error === "empty") { showToast("No speech detected"); notice("I didn't hear anything. Tap the green button, wait for “I'm listening”, then say it. Or tap + to type."); return; }
+      notice(r.error === "limited" ? "That's a lot of talking for one day. You can still type to me." : "I couldn't hear that. Tap + and choose Type if you'd like to write it.");
       return;
     }
-    await send(r.text, undefined, r.blob);
+    await submit(r.text, "voice", r.blob);
   }
 
   /** A photo of her notebook, a receipt or a list, from the camera or the gallery. */
   async function addPhoto(file?: File) {
     if (!file || busy) return;
-    voice.cancel(); stopSpeaking(); unlockSpeech();
-    setTalk(false); setTalkMode("text"); setErr(null); setReply(null);
-    if (!online || offline) { setErr("I need signal to read a photo. Try again when you're back online."); return; }
-    setBusy(true); setReading(true);
+    if (place !== "today") setPlace("today");
+    voice.cancel(); stopSpeaking(); unlockSpeech(); setTyping(false);
+    if (!online || offline) { notice("I need signal to read a photo. Try again when you're back online."); return; }
+    add({ id: mid(), kind: "you", text: "Photo sent", via: "photo" });
+    setBusy(true); setPhase("photo");
     if (speakOn()) speak("Let me read that.");
     const blob = await readablePhoto(file).catch(() => null);
-    if (!blob) { setBusy(false); setReading(false); setErr("I couldn't open that photo. Please try another one."); return; }
+    if (!blob) { setBusy(false); notice("I couldn't open that photo. Please try another one."); return; }
     const res = await sendPhoto(sb, shop.id, blob);
-    setBusy(false); setReading(false);
-    if (!res.reply) { setErr(res.failed === "offline" ? "I need signal to read a photo. Try again when you're back online." : "I couldn't keep that photo. Please try again."); return; }
-    setReply(res.reply);
-    if (res.reply.status !== "failed") bumpNotes();
-    if (speakOn()) { const s = replyToSay(res.reply); if (s) speak(s); }
-    refresh();
+    if (!res.reply) { setBusy(false); notice(res.failed === "offline" ? "I need signal to read a photo. Try again when you're back online." : "I couldn't keep that photo. Please try again."); return; }
+    await handleReply(res.reply, "");
   }
-  const pickPhoto = () => { voice.cancel(); setTalkMode("text"); setTalk(false); photoInput.current?.click(); };
 
-  function closeTalk() {
-    voice.cancel();
-    setTalk(false);
+  function sendTyped() {
+    const v = typed;
+    if (!v.trim()) return;
+    setTyped(""); setTyping(false);
+    submit(v, "text");
+  }
+
+  async function answer(m: Extract<Msg, { kind: "ask" }>, option: string) {
+    setMsgs((cur) => cur.map((x) => (x.id === m.id ? { ...x, answered: true } : x)));
+    if (m.retry) {
+      setBusy(true); setPhase("note");
+      const again = await parseCapture(sb, m.retry.captureId, m.retry.note, undefined, m.retry.heard);
+      await handleReply(again, m.note);
+      return;
+    }
+    submit(option, "text", undefined, `${m.note} | Spal asked: ${m.question}`);
+  }
+
+  function whatToSay() {
+    const item = [...itemNames.values()][0], cust = [...custNames.values()][0];
+    add({ id: mid(), kind: "tips", examples: [
+      item ? `I sold two ${item}, four thousand five hundred` : "I sold three bags of rice, forty five thousand",
+      cust ? `${cust} took bread on credit, three thousand` : "Blessing took bread on credit, three thousand",
+      "I bought fuel for three thousand",
+      "Delete the last record",
+      "How is business today?",
+    ] });
   }
 
   async function reminderSent(r: Remind, f: { text: string; edited: boolean; phone: string | null }) {
@@ -345,12 +405,9 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     setRemind(null);
   }
 
-  async function undo() {
-    if (!reply) return;
-    await undoNote(sb, reply.captureId);
-    setReply(null);
-    setTalk(true);
-    setTalkMode("text");
+  async function undo(m: Extract<Msg, { kind: "result" }>) {
+    await undoNote(sb, m.captureId);
+    setMsgs((cur) => cur.map((x) => (x.id === m.id ? { ...x, undone: true } : x)));
     refresh();
   }
 
@@ -365,8 +422,14 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
       await sb.from("shop").update({ usual_close_time: timeOf(found) }).eq("id", shop.id);
     }
     setClosing(false);
-    setReply(null);
     refresh();
+    // The day, kept: what went into the book, and which of the last seven days she closed.
+    const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(now); d.setDate(d.getDate() - (6 - i)); return { d: new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(d).slice(0, 1), on: dayKey(d) === todayKey || closes.some((c) => c.day === dayKey(d)) }; });
+    const n = week.filter((w) => w.on).length;
+    const rows = [{ label: "Sold", value: naira(s.total) }, ...(s.spent > 0 ? [{ label: "Spent", value: naira(s.spent) }] : []), ...(s.owing.length ? [{ label: "Owed to you", value: naira(s.owing.reduce((x, o) => x + o.kobo, 0)) }] : []), ...(s.best ? [{ label: "Best seller", value: s.best }] : [])];
+    const note = n <= 1 ? "Your first closed day. Well done." : `${n} of the last 7 days closed. Well done.`;
+    add({ id: mid(), kind: "summary", title: "Added to your book today", rows, week, note });
+    if (speakOn()) speak(`Day closed. You sold ${naira(s.total)}. Well done.`);
     // She has something worth keeping now. Ask once a day at most.
     let asked = false;
     try { asked = localStorage.getItem("spal-save-asked") === todayKey; } catch {}
@@ -424,62 +487,32 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
 
   const bigLine = { margin: 0, fontSize: 20, fontWeight: 500, lineHeight: 1.35 } as const;
 
+  const live: Live = starting ? { kind: "starting", title: intro ? "Listen first…" : "One moment…", skip: intro }
+    : listening ? { kind: "listening", title: nudge ? "Go ahead, I'm here" : "I'm listening", sub: nudge || "Talk like you would to a friend. When you're done, tap the green button." }
+    : busy || voice.state === "transcribing" ? { kind: "thinking", title: phase === "photo" ? "Reading your photo…" : phase === "chat" ? "Thinking…" : "Got it. Writing it down…" }
+    : null;
+  const lastResultId = [...msgs].reverse().find((m) => m.kind === "result")?.id ?? null;
+  const showStack = !noSignal && (hasToday || owing.length > 0);
+
   return (
-    <main data-mood={mood} style={{ minHeight: "100dvh", background: "var(--bg)", paddingBottom: 140 }}>
-      <div className="mood-field" style={{ padding: "20px 24px 8px" }}>
+    <main data-mood={mood} style={{ minHeight: "100dvh", background: "var(--bg)", paddingBottom: 170 }}>
+      {toast && <div className="toast" role="status"><Icon name="mic" size={18} />{toast}</div>}
+      <div className="mood-field" style={{ padding: place === "today" ? "20px 24px 44px" : "20px 24px 8px" }}>
         {place === "today" && <Aura tone={evening ? "indigo" : "lilac"} state={voice.state === "recording" ? "listening" : starting || busy || voice.state === "transcribing" ? "thinking" : "idle"} level={voice.level} />}
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}><Logo size={34} /><span className="head" style={{ fontSize: 24 }}>Spal</span></div>
           <button className={`icon-btn ${avatar ? "photo" : ""}`} aria-label="Profile" onClick={() => setProfile(true)}>
             {avatar ? <img src={avatar} alt="" className="avatar" width={48} height={48} /> : <Icon name="user" />}
           </button>
         </div>
-        {place === "today" ? (
-          <>
-            <h1 className="head" style={{ fontSize: 40, margin: "8px 0 0" }}>{greeting(hour)}, {first}</h1>
-            <div className="coach" style={{ minHeight: hasToday || owing.length ? 120 : 150 }} aria-live="polite">
-              {listening ? (
-                <>
-                  <p className="coach-big">{nudge ? "Go ahead, I'm here" : "I'm listening"}</p>
-                  <p className="coach-sub">{nudge || "Talk like you would to a friend. When you're done, tap the green button."}</p>
-                  <div className="coach-actions">
-                    <Button kind="secondary" small onClick={() => { voice.cancel(); setTalkMode("text"); }}>Type instead</Button>
-                    <Button kind="secondary" small onClick={pickPhoto}>Add a photo</Button>
-                  </div>
-                </>
-              ) : starting ? (
-                <>
-                  <p className="coach-big">{intro ? "Listen first…" : "One moment…"}</p>
-                  {intro && <Button kind="secondary" small onClick={() => stopSpeaking()}>Skip</Button>}
-                </>
-              ) : busy || voice.state === "transcribing" ? (
-                <p className="coach-big">{reading ? "Reading your photo…" : "Got it. Writing it down…"}</p>
-              ) : (
-                <>
-                  {isNewOwner() && !reply && !hasToday && (
-                    <>
-                      <p className="coach-big">How was your day?</p>
-                      <p className="coach-sub">Tap the big green button and tell me what you sold, what you spent, or who owes you.</p>
-                    </>
-                  )}
-                  {err && !talk && <p className="coach-sub" role="alert" style={{ color: "var(--care-text)" }}>{err}</p>}
-                  <div className="coach-actions">
-                    {greetWaiting && <Button small onClick={() => { unlockSpeech(); setGreetWaiting(false); speak(greetLine.current); }}>Tap to hear Spal</Button>}
-                    <Button kind="secondary" small onClick={() => { setTalkMode("text"); setTalk(true); }}>Type instead</Button>
-                    <Button kind="secondary" small onClick={pickPhoto}>Add a photo</Button>
-                    <Button kind="secondary" small onClick={() => { stopSpeaking(); setChatOpen(true); }}>Chat with Spal</Button>
-                  </div>
-                </>
-              )}
-            </div>
-          </>
-        ) : (
-          <h1 className="head" style={{ fontSize: 40, margin: "8px 0 24px" }}>My business</h1>
-        )}
+        {place !== "today" && <h1 className="head" style={{ fontSize: 40, margin: "8px 0 24px" }}>My business</h1>}
       </div>
 
       <div style={{ padding: "8px 16px", maxWidth: 560, margin: "0 auto", display: "grid", gap: 12 }}>
         {place === "today" ? (
           <>
+            {showStack && <CardStack cards={cards} onOpen={openCard} />}
+
             {remind && (
               <ReminderCard key={remind.proposalId} title={remind.title} draft={remind.draft} name={remind.name} phone={remind.phone}
                 onSent={(f) => reminderSent(remind, f)} onLater={() => reminderLater(remind)} />
@@ -502,48 +535,6 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
 
             {closes.length > 0 && <ReminderPrompt r={reminders} />}
 
-            {reply && (
-              <Surface>
-                {reply.status === "failed" ? (
-                  <>
-                    <p style={bigLine}>{reply.limited ? "That's a lot for one day. I've kept your note and we'll carry on tomorrow." : "I kept your note, but I couldn't read it just now."}</p>
-                    <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                      {!reply.limited && <Button small disabled={busy} onClick={async () => { setBusy(true); const again = await parseCapture(sb, reply.captureId, reply.note, undefined, reply.heard); setBusy(false); setReply(again); refresh(); }}>{busy ? "One moment" : "Try again"}</Button>}
-                      <Button kind="ghost" small onClick={() => setReply(null)}>OK</Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {reply.lines.length > 0 && (
-                      <>
-                        <p className="label" style={{ margin: 0 }}>{reply.changed ? "Fixed" : "Got it"}</p>
-                        {reply.heard && <p className="label" style={{ margin: "4px 0 0", fontStyle: "italic" }}>{reply.photo ? "I read" : "I heard"}: “{reply.heard.length > 180 ? reply.heard.slice(0, 180) + "…" : reply.heard}”</p>}
-                        <div style={{ marginTop: 8, display: "grid", gap: 6 }}>{reply.lines.map((l, i) => <p key={i} style={bigLine}>{l}</p>)}</div>
-                      </>
-                    )}
-                    {reply.question && (
-                      <div style={{ marginTop: reply.lines.length ? 16 : 0 }}>
-                        <p style={bigLine}>{reply.question}</p>
-                        {(reply.options?.length ?? 0) > 0 && (
-                          <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
-                            {reply.options!.map((o) => <button key={o} className="chip choice" disabled={busy} onClick={() => send(o, `${reply.note} | Spal asked: ${reply.question}`)}>{o}</button>)}
-                          </div>
-                        )}
-                        <div style={{ marginTop: 12 }}><TextField value={answer} onChange={setAnswer} placeholder={(reply.options?.length ?? 0) > 0 ? "Or say it your own way" : "Answer here, or tell me something else"} onSubmit={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} /></div>
-                        <div style={{ marginTop: 12, display: "grid" }}><Button onClick={() => send(answer, `${reply.note} | Spal asked: ${reply.question}`)} disabled={!answer.trim() || busy}>{busy ? "One moment" : "Send"}</Button></div>
-                      </div>
-                    )}
-                    {reply.lines.length > 0 && (
-                      <>
-                        <p className="label" style={{ margin: "12px 0 0", fontSize: 15 }}>Something wrong? Just tell me what to change.</p>
-                        <div style={{ marginTop: 4 }}><Button kind="ghost" small onClick={undo}>Undo</Button></div>
-                      </>
-                    )}
-                  </>
-                )}
-              </Surface>
-            )}
-
             {(noSignal || queued > 0) && (
               <Surface>
                 <p style={bigLine}>{noSignal ? "No signal. You can still tell me things." : `${queued} ${queued === 1 ? "note is" : "notes are"} waiting to be read.`}</p>
@@ -553,17 +544,10 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
               </Surface>
             )}
 
-            {!noSignal && (hasToday || owing.length > 0) ? (
-              <CardStack cards={cards} onOpen={openCard} />            ) : !noSignal && !reply && !evening ? (
-              <Surface>
-                <p style={bigLine}>
-                  {lastClose?.total_kobo
-                    ? `Yesterday was ${naira(lastClose.total_kobo)}. Let's beat it today.`
-                    : `I'm here to help ${shop.name ?? "your shop"} sell more. When you make a sale today, just tell me.`}
-                </p>
-              </Surface>
-            ) : null}
-
+            <Thread msgs={msgs} live={live} lastResultId={lastResultId} greetWaiting={greetWaiting}
+              onUndo={undo} onAnswer={answer} onSkip={() => stopSpeaking()}
+              onReplay={(text) => { unlockSpeech(); setGreetWaiting(false); speak(text); }}
+              onFill={(text) => { setTyped(text); setTyping(true); }} />
           </>
         ) : (
           <>
@@ -584,23 +568,13 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
       </div>
 
       <div style={{ position: "fixed", left: 0, right: 0, bottom: 16, padding: "0 24px", maxWidth: 560, margin: "0 auto", zIndex: 20 }}>
-        <TabBar place={place} onPlace={setPlace} listening={voice.state === "recording"} level={voice.level} onTalk={onTalk} />
+        <Dock place={place} onPlace={setPlace} recording={listening} level={voice.level} typing={typing} text={typed} onText={setTyped}
+          onMic={onTalk} onCancel={() => voice.cancel()} onType={() => { if (place !== "today") setPlace("today"); setTyping(true); }}
+          onCamera={() => camInput.current?.click()} onPhotos={() => galInput.current?.click()}
+          onCloseTyping={() => setTyping(false)} onSend={sendTyped} showChip={place === "today" && !busy && !starting} onChip={whatToSay} />
       </div>
-
-      <Sheet open={talk && talkMode === "text"} onClose={closeTalk} title="Tell Spal">
-        <h2 className="head" style={{ fontSize: 26, margin: "0 0 6px" }}>What should I do?</h2>
-        <p className="label" style={{ margin: "0 0 14px", fontSize: 17 }}>Tell me what you sold or spent, or who owes you. Or ask me to fix or remove something.</p>
-        <TextField value={note} onChange={setNote} onSubmit={() => send(note)} placeholder="Sold two tins of milk, ₦4,500, or: delete the last record" autoFocus
-          onMic={voice.supported ? async () => { setErr(null); const r = await voice.start(); if (r === "ok") { setTalkMode("voice"); } else setErr(micMessage(r)); } : undefined} />
-        {err && <p role="alert" style={{ color: "var(--care-text)", margin: "12px 4px 0" }}>{err}</p>}
-        <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
-          <Button block onClick={() => send(note)} disabled={!note.trim() || busy}>{busy ? "One moment" : "Tell Spal"}</Button>
-          <Button block kind="ghost" onClick={pickPhoto}>Add a photo of your notebook or receipt</Button>
-        </div>
-      </Sheet>
-      <input ref={photoInput} type="file" accept="image/*" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} onChange={(e) => { addPhoto(e.target.files?.[0]); e.target.value = ""; }} />
-
-      <Chat open={chatOpen} onClose={() => setChatOpen(false)} getToken={getToken} first={first} />
+      <input ref={camInput} type="file" accept="image/*" capture="environment" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} onChange={(e) => { addPhoto(e.target.files?.[0]); e.target.value = ""; }} />
+      <input ref={galInput} type="file" accept="image/*" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} onChange={(e) => { addPhoto(e.target.files?.[0]); e.target.value = ""; }} />
 
       <Sheet open={owedOpen} onClose={() => setOwedOpen(false)} title="Owed to you">
         <h2 className="head" style={{ fontSize: 26, margin: "0 0 4px" }}>Owed to you</h2>
@@ -663,7 +637,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
 
       <YourData open={dataOpen} onClose={() => setDataOpen(false)} sb={sb} shopName={shop.name} />
 
-      <Feedback open={feedbackOpen} onClose={() => setFeedbackOpen(false)} sb={sb} shopId={shop.id} lastCaptureId={reply?.captureId ?? null} />
+      <Feedback open={feedbackOpen} onClose={() => setFeedbackOpen(false)} sb={sb} shopId={shop.id} lastCaptureId={(([...msgs].reverse().find((m) => m.kind === "result") as { captureId?: string } | undefined)?.captureId) ?? null} />
 
       <SetPassword open={pwOpen} onClose={() => setPwOpen(false)} sb={sb} email={email} />
 

@@ -11,7 +11,7 @@ export const maxDuration = 30;
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 const nullable = (t: string) => ({ type: [t, "null"] });
 const SCHEMA = {
-  type: "object", additionalProperties: false, required: ["actions", "question", "options", "read"],
+  type: "object", additionalProperties: false, required: ["actions", "question", "options", "read", "chat"],
   properties: {
     actions: {
       type: "array",
@@ -31,6 +31,7 @@ const SCHEMA = {
     question: nullable("string"),
     options: { type: ["array", "null"], items: { type: "string" } },
     read: nullable("string"),
+    chat: { type: "boolean" },
   },
 } as const;
 
@@ -60,6 +61,7 @@ Rules:
 - Ask at most ONE short friendly question (under 15 words, in her own style) when you cannot tell the amount, which record she means, or anything above. You may return actions and a question together when part of her note is clear. If her note is not about the shop at all, return no actions and ask what she meant.
 - Sometimes her note is a PHOTO: her notebook page, a receipt, a handwritten list of sales or debts, a price list, or a shelf. Read it like a careful assistant. Record only what is clearly written or shown; if a number or name is hard to read, do not guess: ask one short question about that part and record the rest. Dates written in the photo are occurred_on. Put a short plain-text copy of what you read in read (for example "2 rice 3000; Blessing owes 2500"), so she can see what you understood. For text and voice notes, read is null.
 - Her answer to your question may be something else entirely (a new sale, or "delete the last record"). Do what she now says; never insist on the old question.
+- chat: set true when her message is not something to record or change: a question ("how is business today", "who owes me", "how do I add a photo"), a greeting, thanks, or small talk. Then actions is empty and question is null. If it is unclear whether she is telling you something to save or only asking, set chat false, return no actions, and ask "Do you want me to save that?" with options ["Yes, save it", "No, just chatting"]. If she answers "No, just chatting", set chat true. Fixing or removing a record ("delete the last record") is never chat.
 - confidence is 0 to 1: how sure you are you read it right.`;
 
 const lagosToday = () => {
@@ -163,6 +165,10 @@ export async function POST(req: Request) {
   const itemIndex = new Map<string, string>();
   for (const i of items ?? []) [i.name, ...(i.aliases ?? [])].forEach((n: string) => itemIndex.set(norm(n), i.id));
 
+  if (parsed.chat === true && !(parsed.actions ?? []).length) {
+    await sb.from("capture").update({ status: "parsed" }).eq("id", capture.id);
+    return NextResponse.json({ status: "chat", lines: [], question: null, options: [], changed: false });
+  }
   const read = isPhoto ? clean(parsed.read).slice(0, 600) : "";
   if (read) await sb.from("capture").update({ transcript: read }).eq("id", capture.id);
   const options = (parsed.options ?? []).map((o) => clean(o)).filter(Boolean).slice(0, 3);

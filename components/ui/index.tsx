@@ -64,12 +64,12 @@ export function TextField({ label, placeholder, value, onChange, onSubmit, onMic
 }
 
 /** The big button. `level` (0..1) drives the rings while listening. */
-export function TalkButton({ listening, level = 0, onClick }: { listening?: boolean; level?: number; onClick?: () => void }) {
+export function TalkButton({ listening, level = 0, onClick, send }: { listening?: boolean; level?: number; onClick?: () => void; send?: boolean }) {
   return (
     <button className="talk" data-listening={!!listening} onClick={onClick} aria-label={listening ? "Stop listening" : "Tell Spal"} aria-pressed={!!listening}>
       <span className="ring" style={{ transform: `scale(${1 + level * 0.18})` }} />
       <span className="ring r2" style={{ transform: `scale(${1 + level * 0.3})` }} />
-      <span className="core"><Icon name="mic" size={30} /></span>
+      <span className="core"><Icon name={send ? "arrowUp" : "mic"} size={30} /></span>
     </button>
   );
 }

@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { Button, Chip, DeltaPill, Icon, ListRow, Orb, ProposalCard, Roll, Segmented, Sheet, Surface, TabBar, TalkButton, TextField, Toggle, type Place } from "@/components/ui";
 import type { OrbState, OrbTone } from "@/components/ui/Orb";
-import { Chat } from "@/components/app/Chat";
+import { Thread } from "@/components/app/Thread";
+import { Dock } from "@/components/app/Dock";
+import type { Msg } from "@/lib/thread";
 import { Aura } from "@/components/ui/Aura";
 import { CardStack } from "@/components/app/Cards";
 import { DayDetail, type Row } from "@/components/app/DaySheet";
@@ -68,6 +70,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+
+const THREAD: Msg[] = [
+  { id: "1", kind: "spal", text: "Good afternoon, Amaka. Yesterday was ₦38,500. Let's beat it today.", greet: true },
+  { id: "2", kind: "you", text: "I sold two tins of milk, four thousand five hundred", via: "voice" },
+  { id: "3", kind: "result", lines: ["Sale: 2 × milk, ₦4,500"], captureId: "x", heard: "I sold two tins of milk, four thousand five hundred" },
+  { id: "4", kind: "you", text: "Blessing took bread on credit", via: "voice" },
+  { id: "5", kind: "ask", question: "How much was the bread, and when will she pay?", options: [], note: "" },
+  { id: "6", kind: "you", text: "How is business today?", via: "text" },
+  { id: "7", kind: "spal", text: "You've sold ₦4,500 so far today, and Blessing owes you for the bread. Yesterday was a stronger day, so there's still time." },
+  { id: "8", kind: "ask", question: "Is that 5,000 each, or 5,000 all together?", options: ["5,000 each", "5,000 in all"], note: "" },
+  { id: "9", kind: "summary", title: "Added to your book today", rows: [{ label: "Sold", value: "₦48,500" }, { label: "Spent", value: "₦12,000" }, { label: "Owed to you", value: "₦18,400" }], week: ["M","T","W","T","F","S","S"].map((d, i) => ({ d, on: i < 3 || i === 4 })), note: "5 of the last 7 days closed. Well done." },
+];
+
 export default function DesignPage() {
   const { mode, setMode } = useTheme();
   const [mood, setMood] = useState<Mood>("normal");
@@ -75,7 +90,6 @@ export default function DesignPage() {
   const [place, setPlace] = useState<Place>("today");
   const [listening, setListening] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   const [auraState, setAuraState] = useState<"idle" | "listening" | "thinking">("idle");
   const [auraTick, setAuraTick] = useState(0);
   useEffect(() => { if (auraState !== "listening") return; const i = setInterval(() => setAuraTick((x) => x + 1), 80); return () => clearInterval(i); }, [auraState]);
@@ -198,9 +212,15 @@ export default function DesignPage() {
         </div>
       </Section>
 
-      <Section title="Chat with Spal">
-        <Button kind="secondary" onClick={() => setChatOpen(true)}>Open chat</Button>
-        <Chat open={chatOpen} onClose={() => setChatOpen(false)} getToken={async () => ""} first="Amaka" />
+      <Section title="The conversation">
+        <div style={{ maxWidth: 430 }}>
+          <Thread msgs={THREAD} live={{ kind: "listening", title: "I'm listening", sub: "Talk like you would to a friend. When you're done, tap the green button." }} lastResultId="3" greetWaiting={true} onUndo={() => {}} onAnswer={() => {}} onReplay={() => {}} onFill={() => {}} onSkip={() => {}} />
+          <div style={{ display: "grid", gap: 24, marginTop: 24 }}>
+            <Dock place="today" onPlace={() => {}} recording={false} level={0} typing={false} text="" onText={() => {}} onMic={() => {}} onCancel={() => {}} onType={() => {}} onCamera={() => {}} onPhotos={() => {}} onCloseTyping={() => {}} onSend={() => {}} showChip={true} onChip={() => {}} />
+            <Dock place="today" onPlace={() => {}} recording={true} level={0.6} typing={false} text="" onText={() => {}} onMic={() => {}} onCancel={() => {}} onType={() => {}} onCamera={() => {}} onPhotos={() => {}} onCloseTyping={() => {}} onSend={() => {}} showChip={false} onChip={() => {}} />
+            <Dock place="today" onPlace={() => {}} recording={false} level={0} typing={true} text="Delete the last record" onText={() => {}} onMic={() => {}} onCancel={() => {}} onType={() => {}} onCamera={() => {}} onPhotos={() => {}} onCloseTyping={() => {}} onSend={() => {}} showChip={false} onChip={() => {}} />
+          </div>
+        </div>
       </Section>
 
       {/* Day details */}

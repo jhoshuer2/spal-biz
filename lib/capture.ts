@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isNetworkError } from "./outbox";
 
-export type Reply = { captureId: string; note: string; heard?: string; lines: string[]; question: string | null; options?: string[]; photo?: boolean; status: "parsed" | "needs_answer" | "failed"; limited?: boolean; changed?: boolean; offline?: boolean };
+export type Reply = { captureId: string; note: string; heard?: string; lines: string[]; question: string | null; options?: string[]; photo?: boolean; status: "parsed" | "needs_answer" | "failed" | "chat"; limited?: boolean; changed?: boolean; offline?: boolean };
 
 /** Ask Spal to understand a note that is already saved. */
 export async function parseCapture(sb: SupabaseClient, captureId: string, note: string, context?: string, heard?: string, photo?: boolean): Promise<Reply> {

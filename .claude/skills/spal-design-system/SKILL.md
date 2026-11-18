@@ -204,22 +204,26 @@ Approved by Joshua on 2026-11-13: **Dialogue**. Two voices. A small circle with 
 - Clear space: half the mark's width on every side. Minimum size: 20px for the mark, 80px wide for the lockup.
 - Merch: the mark alone on chests and pins, the lockup on bags and boxes, the repeating mark as pattern on wrapping and tape (lime ground with ink, or night ground with ivory and lime). Source sheets: `design/logo/explore-3.png`, `explore-4.png`.
 
-## 11. Today: the aura and the three cards
+## 11. Today: one conversation
 
-Approved direction from Joshua, 2026-11-14 (reference: a Wallet-style card stack, and Gemini's listening glow).
+Direction from Joshua, 2026-11-18, after studying Praktika: the conversation is the product.
 
-- **Aura, not orb, on Today.** Spal's voice is a soft field of colour (`components/ui/Aura.tsx`) behind the greeting that fades into the background. Still when idle. It swells and drifts with her voice while she speaks, and drifts slowly while Spal reads her note. Reduced motion keeps it still. The orb stays for onboarding and the closing conversation.
-- **Voice has no sheet.** Tapping the big button starts listening at once; the aura is the listener, with one line and "Type instead" above the tab bar. If Spal cannot understand, the text sheet opens as before.
-- **Three stacked cards** (`components/app/Cards.tsx`): Sold today (lime), Spent today (ink), Owed to you (peach). Each peeks out with its label and number. Tap a card behind to bring it forward; tap the front card to open its sheet (Sold and Spent open the day details on that tab, Owed opens the list of who owes what). Card colours are the `--stack-*` tokens, opaque in light and dark.
+- **The thread** (`components/app/Thread.tsx`): Spal's lines are soft bubbles on the left, hers dark bubbles on the right. Results ("Got it, 2 × milk, ₦4,500" with Undo), questions with tappable choices, the "what to say" tips and the end-of-day summary are all cards inside it. Each Spal line has a small speaker to hear it again. The thread is kept on the phone for the day.
+- **One door.** Whatever she says (voice, typed, photo), Spal decides whether to keep it, fix or remove something, or just answer a question or chat (`/api/parse` sets `chat`, then `/api/chat` answers from her real numbers). If unsure it asks "Do you want me to save that?" with two taps.
+- **Aura** (`components/ui/Aura.tsx`) sits behind the header: still when idle, follows her voice while she speaks, drifts while Spal thinks. Reduced motion keeps it still.
+- **Three stacked cards** (`components/app/Cards.tsx`) stay above the thread: Sold today (lime), Spent today (ink), Owed to you (peach). Tap one behind to bring it forward, tap the front one for its sheet.
+- **The dock** (`components/app/Dock.tsx`): "+" opens Camera, Photos, Type. The big green button talks; while recording it becomes Cancel and a Send arrow with a halo, so she always knows what happens next. A "What to say?" chip floats above it. Typing replaces the dock with an input row.
+- **Closing the day** ends with "Added to your book today": what was kept and which of the last seven days she closed, with rest days allowed. Never guilt.
+- **Gentle failure.** No speech: a "No speech detected" toast plus a friendly line from Spal, never an error box.
 
 ## 12. Guidance and feedback (new owners first)
 
 Most owners are not technical. Spal always says what is happening and what to do next, in plain words, so she is never left wondering.
 
-- **Coach text** (`.coach`, over the aura): "How was your day? Tap the big green button..." for a new owner; "I'm listening" with one line on what to do and a **Type instead** button while recording; "One moment..." the instant she taps; "Got it. Writing it down..." while reading. Never two lines of small print squeezed beside buttons.
+- **Live status bubble** at the end of the thread: "I'm listening" with one line on what to do, "One moment..." the instant she taps, "Got it. Writing it down..." while reading. Never two lines of small print squeezed beside buttons.
 - **Questions are choices.** When Spal is unsure it asks "Did you mean A or B?" and shows the likely answers as large tappable buttons, with a text box for anything else.
 - **Spal speaks** (`lib/speak.ts`): a real voice from `/api/speak` (ElevenLabs, cached on the phone) with the phone's own voice as backup. It greets her each time the app opens ("Good afternoon, Amaka. Yesterday was ₦38,500..."); if the phone blocks sound before a tap, the greeting plays on her first touch. The first times she taps the green button Spal says how it works, then listens; replies and questions are read back. On by default; "Spal talks back to me" in her profile turns it off. Speech never plays while the mic is open.
-- **Chat with Spal** (`components/app/Chat.tsx`, `/api/chat`): a free conversation, typed or spoken, that records nothing. She can ask about her shop (Spal answers from her real numbers, never calculating new ones) or how to use the app, or just talk. A sale mentioned in chat gets a gentle "tap the green button and tell me".
+- **Chatting** happens in the same thread (see section 11), answered from her real numbers by `/api/chat`; nothing is recorded.
 
 ## 13. Keeping this file true
 
