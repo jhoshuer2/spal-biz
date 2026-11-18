@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Aura } from "@/components/ui";
-import { onSpeaking } from "@/lib/speak";
+import { onRate, onSpeaking, onVoiced } from "@/lib/speak";
 
 export type FaceState = "idle" | "listening" | "thinking";
 export type Pill = { id: string; label: string; value: string };
@@ -16,6 +16,9 @@ export function SpalFace({ state, level, evening, pills, onPill, header, talking
   const [heardTalking, setTalking] = useState(false);
   useEffect(() => onSpeaking(setTalking), []);
   const talking = talkingOverride ?? heardTalking;
+  const [voiced, setVoiced] = useState(true);
+  useEffect(() => onVoiced(setVoiced), []);
+  useEffect(() => onRate((r) => { if (video.current) video.current.playbackRate = r; }), []);
   // The talking clip is fetched once the screen has settled, so it never competes with the first paint on a slow phone.
   const video = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
@@ -39,7 +42,7 @@ export function SpalFace({ state, level, evening, pills, onPill, header, talking
   return (
     <section className="face" data-size={size} data-mode={mode} style={{ ["--lv" as string]: String(Math.min(1, level)) }} aria-label="Spal">
       <img className="face-img" src="/spal/face.webp" alt="" width={960} height={540} decoding="async" />
-      <video ref={video} className="face-video" data-on={talking && ready} muted loop playsInline preload="none" aria-hidden="true" onCanPlay={() => setReady(true)} />
+      <video ref={video} className="face-video" data-on={talking && voiced && ready} muted loop playsInline preload="none" aria-hidden="true" onCanPlay={() => setReady(true)} />
       <div className="face-aura"><Aura tone={evening ? "indigo" : "lilac"} state={state} level={level} /></div>
       {header && <div className="face-top">{header}</div>}
       {status && <div className="face-status" role="status"><i />{label}</div>}

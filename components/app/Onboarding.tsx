@@ -18,6 +18,7 @@ const TILES = [
   { id: "other", em: "✨", label: "Something else" },
 ];
 const LINES = ["", "/spal/voice/q-name.mp3", "/spal/voice/q-sells.mp3", "/spal/voice/q-shop.mp3"];
+const WORDS = ["", "Hi, I'm Spal. I'll keep your shop's book, so you never lose track of your money. What should I call you?", "Lovely to meet you. What do you sell?", "And what is your shop called?"];
 
 /**
  * Meeting Spal: a welcome, then three short questions asked by Spal's face (name, what she sells, shop name).
@@ -50,7 +51,7 @@ export function Onboarding({ onDone, error, busy }: { onDone: (a: Answers) => vo
   }, []);
 
   // Spal asks each question out loud when she arrives on it (her tap on the previous button lets the phone play sound).
-  useEffect(() => { if (step > 0 && LINES[step]) playLine(LINES[step]); return () => stopSpeaking(); }, [step]);
+  useEffect(() => { if (step > 0 && LINES[step]) playLine(LINES[step], WORDS[step]); return () => stopSpeaking(); }, [step]);
 
   const first = name.trim().split(/\s+/)[0];
   const labels = TILES.filter((t) => picked.includes(t.id) && t.id !== "other").map((t) => t.label);
