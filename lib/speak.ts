@@ -73,7 +73,7 @@ let onProblem: ((what: string, ctx: Record<string, unknown>) => void) | null = n
 export function setupSpeech(token: () => Promise<string>, problem?: (what: string, ctx: Record<string, unknown>) => void) {
   getToken = token; onProblem = problem ?? null;
   // Fetch the short fixed phrases once, quietly, so they play at once from then on (they are kept on the phone).
-  setTimeout(() => { if (speakOn() && serverOk) ["I'm listening.", "Let me read that."].forEach((t) => ttsUrl(say(t)).catch(() => {})); }, 4000);
+  setTimeout(() => { if (speakOn() && serverOk) ["I'm listening.", "Let me read that.", "Got it.", "Fixed."].forEach((t) => ttsUrl(say(t)).catch(() => {})); }, 4000);
 }
 
 const listeners = new Set<(on: boolean) => void>();
@@ -160,11 +160,11 @@ async function ttsUrl(text: string): Promise<string> {
 
 const SPEECH_WPS = 3.2; // the pace of the talking clip, in words a second
 
-function play(url: string, mine: number, words = 0): Promise<boolean> {
+function play(url: string, mine: number, words = 0, more = false): Promise<boolean> {
   return new Promise((resolve) => {
     const a = el();
     let done = false, raf = 0;
-    const end = (ok: boolean) => { if (done) return; done = true; cancelAnimationFrame(raf); setSpeaking(false); clearTimeout(timer); a.removeEventListener("ended", onEnd); a.removeEventListener("pause", onEnd); a.removeEventListener("error", onErr); resolve(ok); };
+    const end = (ok: boolean) => { if (done) return; done = true; cancelAnimationFrame(raf); if (!(ok && more)) setSpeaking(false); clearTimeout(timer); a.removeEventListener("ended", onEnd); a.removeEventListener("pause", onEnd); a.removeEventListener("error", onErr); resolve(ok); };
     const onEnd = () => end(true);
     const onErr = () => end(false);
     const timer = setTimeout(() => end(true), 25_000);
@@ -220,26 +220,47 @@ function phoneVoice(text: string): Promise<boolean> {
 }
 
 /** Say it. Resolves true if it was really spoken, false if it stayed silent (blocked until a tap, muted, or replaced by newer speech). */
-export async function speak(text: string): Promise<boolean> {
+/** Short parts, so the first sound starts sooner: a long reply is said as up to three pieces, all fetched at once. */
+export function speechParts(text: string): string[] {
+  const sentences = text.match(/[^.!?]+[.!?]*\s*/g)?.map((x) => x.trim()).filter(Boolean) ?? [text];
+  if (sentences.length <= 1 || text.length < 70) return [text];
+  const out: string[] = [sentences[0]];
+  const rest = sentences.slice(1);
+  if (rest.length <= 2) return [...out, ...rest];
+  return [...out, rest[0], rest.slice(1).join(" ")];
+}
+
+/**
+ * Say it. Every piece is requested from the server at the same moment; the first starts playing as soon as it arrives,
+ * and the others are ready by the time it ends. A known short phrase ("Got it.") is already on the phone and plays at once.
+ * Resolves true if it was really spoken, false if it stayed silent (blocked until a tap, muted, or replaced by newer speech).
+ */
+export async function speak(text: string | string[]): Promise<boolean> {
   if (!canSpeak()) return false;
-  const s = say(text);
-  if (!s) return false;
+  const ps = (Array.isArray(text) ? text : speechParts(text)).map(say).filter(Boolean);
+  if (!ps.length) return false;
   stopSpeaking();
   const mine = gen;
   if (serverOk && getToken) {
-    try {
-      const url = await ttsUrl(s);
+    const fetches = ps.map((p) => ttsUrl(p).then((u) => ({ u }), (e: unknown) => ({ e })));
+    for (let i = 0; i < ps.length; i++) {
+      const r = await fetches[i];
       if (mine !== gen) return false;
-      return await play(url, mine, s.split(/\s+/).length);
-    } catch (e) {
-      const status = (e as { status?: number })?.status;
-      if (status === 429) return phoneVoice(s);
-      serverOk = false; // do not keep asking a server that cannot do it; the phone's own voice carries on
-      if (!reported) { reported = true; onProblem?.("Spoken voice from the server failed", { status: status ?? null, message: e instanceof Error ? e.message : String(e) }); }
+      if ("u" in r) {
+        const ok = await play(r.u, mine, ps[i].split(/\s+/).length, i < ps.length - 1);
+        if (!ok) return false; // blocked or cut short
+        continue;
+      }
+      const status = (r.e as { status?: number })?.status;
+      if (status !== 429) {
+        serverOk = false; // do not keep asking a server that cannot do it; the phone's own voice carries on
+        if (!reported) { reported = true; onProblem?.("Spoken voice from the server failed", { status: status ?? null, message: r.e instanceof Error ? r.e.message : String(r.e) }); }
+      }
+      return mine === gen ? phoneVoice(ps.slice(i).join(" ")) : false;
     }
+    return true;
   }
-  if (mine !== gen) return false;
-  return phoneVoice(s);
+  return phoneVoice(ps.join(" "));
 }
 
 /** Play a recorded line that ships with the app (used before she has an account, when the server voice is not available). */
@@ -277,6 +298,14 @@ export function lineToSpeech(line: string) {
   if (/^Removed:/.test(line)) return "I've taken that record out";
   if (/^Updated:/.test(line)) return "I've changed that record";
   return line;
+}
+
+/** The reply in two pieces: a short known phrase that plays instantly, then what was kept, fetched while the first plays. */
+export function replyParts(r: { question: string | null; lines: string[]; status: string; changed?: boolean }): string[] {
+  if (r.status === "failed") return ["I kept your note, but I couldn't read it just now."];
+  if (r.question) return [r.question];
+  if (!r.lines.length) return [];
+  return [r.changed ? "Fixed." : "Got it.", `${lineToSpeech(r.lines[0])}.${r.lines.length > 1 ? ` And ${words(r.lines.length - 1)} more.` : ""}`];
 }
 
 /** What Spal says when the answer arrives. The first words say what it did, so "Got it" is only said once it truly has. */

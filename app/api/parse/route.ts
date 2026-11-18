@@ -133,7 +133,7 @@ export async function POST(req: Request) {
       model: MODEL, max_tokens: 3000,
       betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
       ...(structured ? { output_config: { effort: (photo ? "medium" : "low") as "low" | "medium", format: { type: "json_schema" as const, schema: SCHEMA as unknown as Record<string, unknown> } } } : { output_config: { effort: (photo ? "medium" : "low") as "low" | "medium" } }),
-      system: structured ? SYSTEM : `${SYSTEM}\n\nReply with ONLY a JSON object, no other text, shaped like: ${JSON.stringify(SCHEMA)}`,
+      system: [{ type: "text" as const, text: structured ? SYSTEM : `${SYSTEM}\n\nReply with ONLY a JSON object, no other text, shaped like: ${JSON.stringify(SCHEMA)}`, cache_control: { type: "ephemeral" as const } }], // the long instructions are the same every time: reuse them instead of re-reading them
       messages: [{ role: "user", content: photo ? [{ type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: photo.data } }, { type: "text" as const, text: userMsg }] : userMsg }],
     });
     let res;

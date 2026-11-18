@@ -18,7 +18,7 @@ import { Celebration } from "./Celebration";
 import { AddToHome } from "./AddToHome";
 import { a2hsDue, a2hsShown, a2hsShownCount, isStandalone } from "@/lib/install";
 import { chatHistory, loadThread, mid, saveThread, type Msg } from "@/lib/thread";
-import { bumpNotes, chirp, cueFor, introDone, isIOS, setupSpeech, speakWhenAllowed, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
+import { bumpNotes, chirp, cueFor, introDone, isIOS, setupSpeech, speakWhenAllowed, isNewOwner, micKnown, rememberMic, replyParts, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
 import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
@@ -323,7 +323,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     if (r.lines.length) out.push({ id: mid(), kind: "result", lines: r.lines, changed: r.changed, heard: r.heard, photo: r.photo, captureId: r.captureId });
     if (r.question) out.push({ id: mid(), kind: "ask", question: r.question, options: r.options ?? [], note: said || r.note });
     if (out.length) add(...out);
-    if (speakOn() && !first) { const s = replyToSay(r); if (s) speak(s); }
+    if (speakOn() && !first) { const p = replyParts(r); if (p.length) speak(p); }
     refresh();
   }
 
