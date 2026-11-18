@@ -39,7 +39,7 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
-  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/")) { event.respondWith(cacheFirst(req)); return; }
+  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/") || (url.pathname.startsWith("/spal/") && !url.pathname.endsWith(".mp4"))) { event.respondWith(cacheFirst(req)); return; }
   if (req.mode === "navigate") event.respondWith(pageNetworkFirst(req));
 });
 

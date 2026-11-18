@@ -414,3 +414,7 @@ html[data-boot="returning"] .boot-new { display: none !important; }
 .face-pill strong { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .face-pill:active { transform: scale(0.98); }
 @media (prefers-reduced-motion: reduce) { .face-img { animation: none !important; } }
+
+.face-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; z-index: -2; opacity: 0; transition: opacity 0.25s ease; }
+.face-video[data-on="true"] { opacity: 1; }
+.face[data-mode="speaking"] .face-img { animation: none; }
