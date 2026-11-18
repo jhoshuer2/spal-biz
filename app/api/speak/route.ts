@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${v}?output_format=mp3_22050_32`, {
       method: "POST",
       headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },
-      body: JSON.stringify({ text, model_id: "eleven_flash_v2_5", voice_settings: { stability: 0.5, similarity_boost: 0.75, speed: 1.0 } }),
+      body: JSON.stringify({ text, model_id: "eleven_flash_v2_5", voice_settings: { stability: 0.5, similarity_boost: 0.75, speed: 1.12 } }),
     }).catch(() => null);
     if (r?.ok) break;
     status = r?.status ?? 0;

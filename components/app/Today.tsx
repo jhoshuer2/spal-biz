@@ -18,7 +18,7 @@ import { Celebration } from "./Celebration";
 import { AddToHome } from "./AddToHome";
 import { a2hsDue, a2hsShown, a2hsShownCount, isStandalone } from "@/lib/install";
 import { chatHistory, loadThread, mid, saveThread, type Msg } from "@/lib/thread";
-import { bumpNotes, cueFor, introDone, isIOS, setupSpeech, speakWhenAllowed, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
+import { bumpNotes, chirp, cueFor, introDone, isIOS, setupSpeech, speakWhenAllowed, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
 import { Closing } from "./Closing";
 import { ReminderCard } from "./Reminder";
 import { draftReminder, reminderTitle } from "@/lib/reminders";
@@ -366,7 +366,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   }
 
   async function stopAndSend() {
-    if (speakOn() && heard.current) speak("Got it."); // answers the tap at once; the full reply follows when it is ready
+    if (heard.current) chirp(); // a tick says "I heard you tap"; "Got it" is only said once Spal has really read the note
     const r = await voice.finish();
     if ("error" in r && r.error === "offline" && r.blob) { await keepForLater({ kind: "note", blob: r.blob }); notice("No signal. I've kept your voice note on your phone and I'll read it when you're back online."); return; }
     if ("error" in r) {
@@ -517,7 +517,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
 
   const live: Live = starting ? { kind: "starting", title: intro ? "Listen first…" : "One moment…", skip: intro }
     : listening ? { kind: "listening", title: nudge ? "Go ahead, I'm here" : "I'm listening", sub: nudge || "Talk like you would to a friend. When you're done, tap the green button." }
-    : busy || voice.state === "transcribing" ? { kind: "thinking", title: phase === "photo" ? "Reading your photo…" : phase === "chat" ? "Thinking…" : "Got it. Writing it down…" }
+    : busy || voice.state === "transcribing" ? { kind: "thinking", title: phase === "photo" ? "Reading your photo…" : phase === "chat" ? "Thinking…" : "Writing it down…" }
     : null;
   const lastResultId = [...msgs].reverse().find((m) => m.kind === "result")?.id ?? null;
   const showStack = !noSignal && (hasToday || owing.length > 0);

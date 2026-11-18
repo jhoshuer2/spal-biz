@@ -26,13 +26,55 @@ export const cueFor = () => (num(INTRO) < 2 ? INTRO_TEXT : num(INTRO) < 8 ? "I'm
 export const introDone = () => set(INTRO, String(num(INTRO) + 1));
 
 /** "₦4,500" is read as "4,500 naira". */
-export const say = (t: string) => t.replace(/₦\s?([\d,]+(?:\.\d+)?)/g, "$1 naira").replace(/\s+/g, " ").trim();
+const ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+/** 4500 becomes "four thousand five hundred", so the voice says an amount in one go instead of "40 hundred 500". */
+export function words(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return String(n);
+  n = Math.floor(n);
+  if (n < 20) return ONES[n];
+  if (n < 100) return TENS[Math.floor(n / 10)] + (n % 10 ? " " + ONES[n % 10] : "");
+  if (n < 1000) return ONES[Math.floor(n / 100)] + " hundred" + (n % 100 ? " and " + words(n % 100) : "");
+  for (const [size, name] of [[1e9, "billion"], [1e6, "million"], [1e3, "thousand"]] as const) {
+    if (n >= size) { const rest = n % size; return words(Math.floor(n / size)) + " " + name + (rest ? (rest < 100 ? " and " : " ") + words(rest) : ""); }
+  }
+  return String(n);
+}
+/** What is said aloud: amounts in words, "₦4,500" as "four thousand five hundred naira". */
+export const say = (t: string) =>
+  t.replace(/₦\s?([\d,]+(?:\.\d{1,2})?)/g, (_m, num: string) => {
+      const [w, f] = num.replace(/,/g, "").split(".");
+      const kobo = f ? Number(f.padEnd(2, "0")) : 0;
+      return `${words(Number(w))} naira${kobo ? ` ${words(kobo)} kobo` : ""}`;
+    })
+    .replace(/\b\d{1,3}(?:,\d{3})+\b/g, (m) => words(Number(m.replace(/,/g, ""))))
+    .replace(/\b\d{4,}\b/g, (m) => words(Number(m)))
+    .replace(/×/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** A short tick, made on the phone, for "I heard you tap". It does not claim anything yet (it is not "got it"). */
+export function chirp() {
+  if (!canSpeak() || !speakOn()) return;
+  try {
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const c = new AC(), o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
+    o.type = "sine"; o.frequency.setValueAtTime(620, t); o.frequency.exponentialRampToValueAtTime(940, t + 0.09);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.17);
+    setTimeout(() => c.close().catch(() => {}), 500);
+  } catch { /* silent is fine */ }
+}
 
 // ---- the engine ----
 let getToken: (() => Promise<string>) | null = null;
 let onProblem: ((what: string, ctx: Record<string, unknown>) => void) | null = null;
 /** Give the voice what it needs to ask the server for speech, and where to report trouble. */
-export function setupSpeech(token: () => Promise<string>, problem?: (what: string, ctx: Record<string, unknown>) => void) { getToken = token; onProblem = problem ?? null; }
+export function setupSpeech(token: () => Promise<string>, problem?: (what: string, ctx: Record<string, unknown>) => void) {
+  getToken = token; onProblem = problem ?? null;
+  // Fetch the short fixed phrases once, quietly, so they play at once from then on (they are kept on the phone).
+  setTimeout(() => { if (speakOn() && serverOk) ["I'm listening.", "Let me read that."].forEach((t) => ttsUrl(say(t)).catch(() => {})); }, 4000);
+}
 
 const listeners = new Set<(on: boolean) => void>();
 let speakingNow = false;
@@ -226,9 +268,21 @@ export function speakWhenAllowed(text: string, waiting?: (w: boolean) => void) {
 export const isIOS = () => typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
 /** What Spal says when the answer arrives: short, because "Got it" was already said the moment she tapped. */
+/** One kept record, said like a person: "Sale, ₦4,500 (2 milk)" becomes "Sold 2 milk for ₦4,500". */
+export function lineToSpeech(line: string) {
+  let m = /^Sale(?: to ([^,]+))?, (₦[\d,.]+)(?: \((.+)\))?$/.exec(line);
+  if (m) return `Sold ${m[3] ?? "that"}${m[1] ? " to " + m[1] : ""} for ${m[2]}`;
+  m = /^(₦[\d,.]+) on credit(?: for ([^,(]+))?(?:, due ([^()]+))?(?: \((.+)\))?$/.exec(line);
+  if (m) return `${m[2] ? m[2].trim() + " took " : "On credit: "}${m[4] ?? "goods"}${m[2] ? " on credit" : ""}, ${m[1]}${m[3] ? ", due " + m[3] : ""}`;
+  if (/^Removed:/.test(line)) return "I've taken that record out";
+  if (/^Updated:/.test(line)) return "I've changed that record";
+  return line;
+}
+
+/** What Spal says when the answer arrives. The first words say what it did, so "Got it" is only said once it truly has. */
 export function replyToSay(r: { question: string | null; lines: string[]; status: string; changed?: boolean }) {
   if (r.status === "failed") return "I kept your note, but I couldn't read it just now.";
   if (r.question) return r.question;
   if (!r.lines.length) return "";
-  return `${r.changed ? "Fixed. " : ""}${r.lines[0]}`;
+  return `${r.changed ? "Fixed. " : "Got it. "}${lineToSpeech(r.lines[0])}.${r.lines.length > 1 ? ` And ${words(r.lines.length - 1)} more.` : ""}`;
 }
