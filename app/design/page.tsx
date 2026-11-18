@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { Button, Chip, DeltaPill, Icon, ListRow, Orb, ProposalCard, Roll, Segmented, Sheet, Surface, TabBar, TalkButton, TextField, Toggle, type Place } from "@/components/ui";
 import type { OrbState, OrbTone } from "@/components/ui/Orb";
+import { Celebration } from "@/components/app/Celebration";
+import { AddToHome } from "@/components/app/AddToHome";
 import { SpalFace } from "@/components/app/SpalFace";
 import { Thread } from "@/components/app/Thread";
 import { Dock } from "@/components/app/Dock";
@@ -91,6 +93,8 @@ export default function DesignPage() {
   const [place, setPlace] = useState<Place>("today");
   const [listening, setListening] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [showCelebrate, setShowCelebrate] = useState(false);
+  const [showA2hs, setShowA2hs] = useState(false);
   const [faceTalk, setFaceTalk] = useState(false);
   const [auraState, setAuraState] = useState<"idle" | "listening" | "thinking">("idle");
   const [auraTick, setAuraTick] = useState(0);
@@ -212,6 +216,15 @@ export default function DesignPage() {
             { id: "owed", label: "Owed to you", kobo: 1_840_000, empty: "", lines: [{ label: "Blessing", value: "₦9,000" }, { label: "Mama Chidi", value: "₦6,400" }, { label: "Tunde", value: "₦3,000" }] },
           ]} />
         </div>
+      </Section>
+
+      <Section title="First sale and home screen">
+        <div style={{ display: "flex", gap: 8 }}>
+          <Button kind="secondary" small onClick={() => setShowCelebrate(true)}>First-sale moment</Button>
+          <Button kind="secondary" small onClick={() => setShowA2hs(true)}>Home screen guide</Button>
+        </div>
+        {showCelebrate && <Celebration line="Sale: 2 × milk, ₦4,500" onDone={() => setShowCelebrate(false)} />}
+        <AddToHome open={showA2hs} onClose={() => setShowA2hs(false)} />
       </Section>
 
       <Section title="The conversation">

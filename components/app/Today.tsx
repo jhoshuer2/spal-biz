@@ -14,6 +14,9 @@ import { micMessage, transcribe, useVoice } from "@/lib/voice";
 import { Thread, type Live } from "./Thread";
 import { Dock } from "./Dock";
 import { SpalFace } from "./SpalFace";
+import { Celebration } from "./Celebration";
+import { AddToHome } from "./AddToHome";
+import { a2hsDue, a2hsShown, a2hsShownCount, isStandalone } from "@/lib/install";
 import { chatHistory, loadThread, mid, saveThread, type Msg } from "@/lib/thread";
 import { bumpNotes, cueFor, introDone, isIOS, setupSpeech, speakWhenAllowed, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
 import { Closing } from "./Closing";
@@ -40,6 +43,8 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const { mode, setMode } = useTheme();
   const sb = supabaseBrowser();
   const [place, setPlace] = useState<Place>("today");
+  const [celebrate, setCelebrate] = useState<string | null>(null);
+  const [a2hs, setA2hs] = useState(false);
   const [typing, setTyping] = useState(false);
   const [typed, setTyped] = useState("");
   const [toast, setToast] = useState("");
@@ -279,6 +284,13 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   // The conversation is kept on the phone for the day.
   useEffect(() => { saveThread(shop.id, todayKey, msgs); }, [msgs, shop.id, todayKey]);
 
+  // Owners who already have sales never see the "first sale" moment.
+  const firstKey = `spal-first-sale:${shop.id}`;
+  useEffect(() => {
+    if (!loaded) return;
+    try { if (recent.some((e) => e.kind === "sale" || e.kind === "credit_sale")) localStorage.setItem(firstKey, "1"); } catch { /* private mode */ }
+  }, [loaded, recent, firstKey]);
+
   /** What she says, from the mic or the keyboard. Spal works out whether to keep it, fix something, or just answer. */
   async function submit(text: string, via: "voice" | "text", voiceBlob?: Blob, explicitContext?: string) {
     const t = text.trim();
@@ -302,11 +314,16 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
       return;
     }
     bumpNotes();
+    // The very first sale she ever records: a moment, then (once) a guide to putting Spal on her phone.
+    const saleLine = r.changed ? undefined : r.lines.find((l) => /^Sale|on credit/i.test(l));
+    let first = false;
+    try { first = !!saleLine && loaded && !localStorage.getItem(firstKey) && !recent.some((e) => e.kind === "sale" || e.kind === "credit_sale"); if (first) localStorage.setItem(firstKey, "1"); } catch { /* private mode */ }
+    if (first && saleLine) { setCelebrate(saleLine); if (speakOn()) speak("Your first sale is in the book. Well done!"); }
     const out: Msg[] = [];
     if (r.lines.length) out.push({ id: mid(), kind: "result", lines: r.lines, changed: r.changed, heard: r.heard, photo: r.photo, captureId: r.captureId });
     if (r.question) out.push({ id: mid(), kind: "ask", question: r.question, options: r.options ?? [], note: said || r.note });
     if (out.length) add(...out);
-    if (speakOn()) { const s = replyToSay(r); if (s) speak(s); }
+    if (speakOn() && !first) { const s = replyToSay(r); if (s) speak(s); }
     refresh();
   }
 
@@ -439,6 +456,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
     const rows = [{ label: "Sold", value: naira(s.total) }, ...(s.spent > 0 ? [{ label: "Spent", value: naira(s.spent) }] : []), ...(s.owing.length ? [{ label: "Owed to you", value: naira(s.owing.reduce((x, o) => x + o.kobo, 0)) }] : []), ...(s.best ? [{ label: "Best seller", value: s.best }] : [])];
     const note = n <= 1 ? "Your first closed day. Well done." : `${n} of the last 7 days closed. Well done.`;
     add({ id: mid(), kind: "summary", title: "Added to your book today", rows, week, note });
+    if (a2hsShownCount() === 1 && a2hsDue(20 * 3_600_000)) { a2hsShown(); setTimeout(() => setA2hs(true), 1200); } // a second, gentler ask on her first closed day
     if (speakOn()) speak(`Day closed. You sold ${naira(s.total)}. Well done.`);
     // She has something worth keeping now. Ask once a day at most.
     let asked = false;
@@ -600,6 +618,9 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
       <input ref={camInput} type="file" accept="image/*" capture="environment" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} onChange={(e) => { addPhoto(e.target.files?.[0]); e.target.value = ""; }} />
       <input ref={galInput} type="file" accept="image/*" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} onChange={(e) => { addPhoto(e.target.files?.[0]); e.target.value = ""; }} />
 
+      {celebrate && <Celebration line={celebrate} onDone={() => { setCelebrate(null); if (a2hsDue()) { a2hsShown(); setTimeout(() => setA2hs(true), 400); } }} />}
+      <AddToHome open={a2hs} onClose={() => setA2hs(false)} />
+
       <Sheet open={owedOpen} onClose={() => setOwedOpen(false)} title="Owed to you">
         <h2 className="head" style={{ fontSize: 26, margin: "0 0 4px" }}>Owed to you</h2>
         <p className="num" style={{ fontSize: 40, margin: "0 0 12px" }}>{naira(owedTotal)}</p>
@@ -631,6 +652,12 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
           <span>Hear Spal's voice{voiceTest === "silent" && <span className="label" style={{ display: "block", fontSize: 15, marginTop: 4 }}>Nothing played. Check the phone isn't on silent and the volume is up. Some phones can't do this, and Spal will keep showing everything in writing.</span>}</span>
           <Button kind="secondary" small disabled={voiceTest === "playing"} onClick={async () => { unlockSpeech(); setVoiceTest("playing"); const ok = await speak("Hello, I'm Spal. Can you hear me? Tap the green button and tell me about your day."); setVoiceTest(ok ? "ok" : "silent"); }}>{voiceTest === "playing" ? "Playing…" : "Play"}</Button>
         </div>
+        {!isStandalone() && (
+          <>
+            <p className="label" style={{ margin: "16px 0 4px" }}>On your phone</p>
+            <button className="row" onClick={() => { setProfile(false); setA2hs(true); }}><span>Add Spal to your home screen</span><Icon name="chevron" size={20} /></button>
+          </>
+        )}
         <p className="label" style={{ margin: "16px 0 4px" }}>Your data</p>
         <button className="row" onClick={() => { setProfile(false); setDataOpen(true); }}><span>Download or delete my data</span><Icon name="chevron" size={20} /></button>
         <p className="label" style={{ margin: "16px 0 4px" }}>Help</p>

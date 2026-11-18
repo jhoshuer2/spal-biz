@@ -224,6 +224,11 @@ Short on purpose: a welcome, then three questions, then straight into the first 
 - **Three questions asked by Spal's face**, each a bubble under a compact face with a progress bar and back arrow: her name, what she sells (tap up to three tiles, "Something else" to type), her shop's name (optional, defaults to "Name's shop"). Spal says each question out loud from recorded lines in `public/spal/voice/` (the tap on the previous button lets the phone play sound), and the talking clip plays while she speaks.
 - Her private account is made quietly when she taps **Let's go**. Microphone and reminder permissions are asked later, in context, never here.
 
+## 11c. The first sale, and putting Spal on the phone
+
+- **First sale** (`components/app/Celebration.tsx`): the first time an owner ever records a sale, a full lime screen with Spal's face, confetti, "Your first sale is in the book", the sale line, and one Continue button. Spal says it aloud. It never shows for owners who already have sales.
+- **Home-screen guide** (`components/app/AddToHome.tsx`, `lib/install.ts`): after that moment, once, and again gently on her first closed day if she has not added it, then never. Three big numbered steps with icons for iPhone (Share, Add to Home Screen, Add) and Android (three dots, Add to Home screen, Install), plus a one-tap "Add Spal to my phone" button where Chrome allows it. It tells her to leave Facebook or Instagram's browser first. It is always in the profile under "On your phone" until the app is installed.
+
 ## 12. Guidance and feedback (new owners first)
 
 Most owners are not technical. Spal always says what is happening and what to do next, in plain words, so she is never left wondering.
