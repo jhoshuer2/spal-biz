@@ -10,11 +10,12 @@ export type Pill = { id: string; label: string; value: string };
  * Spal's face, with the conversation below it. The face breathes when idle, glows with her voice while she speaks,
  * and shows when Spal is thinking or talking. The day's three numbers sit on the face as taps.
  */
-export function SpalFace({ state, level, evening, pills, onPill, header }: {
-  state: FaceState; level: number; evening: boolean; pills: Pill[]; onPill: (id: string) => void; header: React.ReactNode;
+export function SpalFace({ state, level, evening, pills, onPill, header, talkingOverride }: {
+  state: FaceState; level: number; evening: boolean; pills: Pill[]; onPill: (id: string) => void; header: React.ReactNode; talkingOverride?: boolean;
 }) {
-  const [talking, setTalking] = useState(false);
+  const [heardTalking, setTalking] = useState(false);
   useEffect(() => onSpeaking(setTalking), []);
+  const talking = talkingOverride ?? heardTalking;
   // The talking clip is fetched once the screen has settled, so it never competes with the first paint on a slow phone.
   const video = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);

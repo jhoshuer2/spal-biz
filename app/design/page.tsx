@@ -91,6 +91,7 @@ export default function DesignPage() {
   const [place, setPlace] = useState<Place>("today");
   const [listening, setListening] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [faceTalk, setFaceTalk] = useState(false);
   const [auraState, setAuraState] = useState<"idle" | "listening" | "thinking">("idle");
   const [auraTick, setAuraTick] = useState(0);
   useEffect(() => { if (auraState !== "listening") return; const i = setInterval(() => setAuraTick((x) => x + 1), 80); return () => clearInterval(i); }, [auraState]);
@@ -214,8 +215,10 @@ export default function DesignPage() {
       </Section>
 
       <Section title="The conversation">
+        <Button kind="secondary" small onClick={() => setFaceTalk((v) => !v)}>{faceTalk ? "Stop talking" : "Make Spal talk"}</Button>
+        <div style={{ height: 12 }} />
         <div style={{ maxWidth: 430, border: "1px solid var(--line)", borderRadius: 32, overflow: "hidden", marginBottom: 24, background: "var(--bg)" }}>
-          <SpalFace state="idle" level={0} evening={false} pills={[{ id: "sold", label: "Sold today", value: "₦48,500" }, { id: "spent", label: "Spent today", value: "₦12,000" }, { id: "owed", label: "Owed to you", value: "₦18,400" }]} onPill={() => {}} header={<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span className="head" style={{ fontSize: 24 }}>Spal</span><button className="icon-btn" aria-label="Profile"><Icon name="user" /></button></div>} />
+          <SpalFace talkingOverride={faceTalk} state="idle" level={0} evening={false} pills={[{ id: "sold", label: "Sold today", value: "₦48,500" }, { id: "spent", label: "Spent today", value: "₦12,000" }, { id: "owed", label: "Owed to you", value: "₦18,400" }]} onPill={() => {}} header={<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span className="head" style={{ fontSize: 24 }}>Spal</span><button className="icon-btn" aria-label="Profile"><Icon name="user" /></button></div>} />
           <div style={{ padding: "12px 16px" }}><Thread msgs={THREAD.slice(0, 4)} live={null} lastResultId="3" greetWaiting={false} onUndo={() => {}} onAnswer={() => {}} onReplay={() => {}} onFill={() => {}} onSkip={() => {}} /></div>
         </div>
         <div style={{ maxWidth: 430 }}>
