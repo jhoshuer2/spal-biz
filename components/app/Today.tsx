@@ -13,6 +13,7 @@ import { useTheme, type ThemeMode } from "@/lib/theme";
 import { micMessage, transcribe, useVoice } from "@/lib/voice";
 import { Thread, type Live } from "./Thread";
 import { Dock } from "./Dock";
+import { SpalFace } from "./SpalFace";
 import { chatHistory, loadThread, mid, saveThread, type Msg } from "@/lib/thread";
 import { bumpNotes, cueFor, introDone, isIOS, setupSpeech, speakWhenAllowed, isNewOwner, micKnown, rememberMic, replyToSay, setSpeak, speak, speakOn, stopSpeaking, unlockSpeech } from "@/lib/speak";
 import { Closing } from "./Closing";
@@ -43,7 +44,13 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const [typed, setTyped] = useState("");
   const [toast, setToast] = useState("");
   const [phase, setPhase] = useState<"note" | "chat" | "photo">("note");
-  const [msgs, setMsgs] = useState<Msg[]>(() => (typeof window === "undefined" ? [] : loadThread(shop.id, dayKey(new Date()))));
+  const [msgs, setMsgs] = useState<Msg[]>(() => {
+    if (typeof window === "undefined") return [];
+    const saved = loadThread(shop.id, dayKey(new Date()));
+    // Earlier versions repeated the greeting on every refresh: keep only the last one.
+    const lastGreet = saved.map((m) => (m.kind === "spal" && m.greet ? m.id : null)).filter(Boolean).pop();
+    return saved.filter((m) => !(m.kind === "spal" && m.greet && m.id !== lastGreet));
+  });
   const msgsRef = useRef(msgs);
   msgsRef.current = msgs;
   const [starting, setStarting] = useState(false);
@@ -250,6 +257,9 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   useEffect(() => {
     if (!loaded || greeted) return;
     greeted = true;
+    // One greeting is enough: refreshing or reopening within a few hours does not repeat it.
+    const gk = `spal-greeted:${shop.id}`;
+    try { if (Date.now() - Number(localStorage.getItem(gk) ?? 0) < 3 * 3_600_000) return; localStorage.setItem(gk, String(Date.now())); } catch { /* private mode: greet */ }
     const g = `${greeting(hour)}, ${first}.`;
     const line = evening && !closedToday ? `${g} How did sales go today?`
       : hasToday && sales > 0 ? `${g} You've sold ${naira(sales)} so far today.`
@@ -494,25 +504,37 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
   const lastResultId = [...msgs].reverse().find((m) => m.kind === "result")?.id ?? null;
   const showStack = !noSignal && (hasToday || owing.length > 0);
 
-  return (
-    <main data-mood={mood} style={{ minHeight: "100dvh", background: "var(--bg)", paddingBottom: 170 }}>
-      {toast && <div className="toast" role="status"><Icon name="mic" size={18} />{toast}</div>}
-      <div className="mood-field" style={{ padding: place === "today" ? "20px 24px 44px" : "20px 24px 8px" }}>
-        {place === "today" && <Aura tone={evening ? "indigo" : "lilac"} state={voice.state === "recording" ? "listening" : starting || busy || voice.state === "transcribing" ? "thinking" : "idle"} level={voice.level} />}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}><Logo size={34} /><span className="head" style={{ fontSize: 24 }}>Spal</span></div>
-          <button className={`icon-btn ${avatar ? "photo" : ""}`} aria-label="Profile" onClick={() => setProfile(true)}>
-            {avatar ? <img src={avatar} alt="" className="avatar" width={48} height={48} /> : <Icon name="user" />}
-          </button>
-        </div>
-        {place !== "today" && <h1 className="head" style={{ fontSize: 40, margin: "8px 0 24px" }}>My business</h1>}
-      </div>
+  const headerRow = (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}><Logo size={34} /><span className="head" style={{ fontSize: 24 }}>Spal</span></div>
+      <button className={`icon-btn ${avatar ? "photo" : ""}`} aria-label="Profile" onClick={() => setProfile(true)}>
+        {avatar ? <img src={avatar} alt="" className="avatar" width={48} height={48} /> : <Icon name="user" />}
+      </button>
+    </div>
+  );
+  const faceState = voice.state === "recording" ? "listening" : starting || busy || voice.state === "transcribing" ? "thinking" : "idle";
+  const pills = showStack ? [
+    { id: "sold", label: "Sold today", value: naira(sales) },
+    { id: "spent", label: "Spent today", value: naira(spent) },
+    { id: "owed", label: "Owed to you", value: naira(owedTotal) },
+  ] : [];
 
-      <div style={{ padding: "8px 16px", maxWidth: 560, margin: "0 auto", display: "grid", gap: 12 }}>
+  return (
+    <main data-mood={mood} className="home">
+      {toast && <div className="toast" role="status"><Icon name="mic" size={18} />{toast}</div>}
+      {place === "today" ? (
+        <SpalFace state={faceState} level={voice.level} evening={evening} pills={pills} onPill={(id) => openCard(id as CardId)} header={headerRow} />
+      ) : (
+        <div className="mood-field" style={{ padding: "20px 24px 8px", flex: "none" }}>
+          {headerRow}
+          <h1 className="head" style={{ fontSize: 40, margin: "8px 0 24px" }}>My business</h1>
+        </div>
+      )}
+
+      <div className="home-scroll">
+      <div style={{ padding: "12px 16px", maxWidth: 560, margin: "0 auto", display: "grid", gap: 12 }}>
         {place === "today" ? (
           <>
-            {showStack && <CardStack cards={cards} onOpen={openCard} />}
-
             {remind && (
               <ReminderCard key={remind.proposalId} title={remind.title} draft={remind.draft} name={remind.name} phone={remind.phone}
                 onSent={(f) => reminderSent(remind, f)} onLater={() => reminderLater(remind)} />
@@ -551,6 +573,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
           </>
         ) : (
           <>
+          {showStack && <CardStack cards={cards} onOpen={openCard} />}
           <Surface>
             <ListRow label="Shop" value={shop.name ?? ""} chevron={false} />
             <ListRow label="Sells" value={shop.sells ?? ""} chevron={false} />
@@ -565,6 +588,7 @@ export function Today({ shop, offline = false }: { shop: Shop; offline?: boolean
           </Surface>
           </>
         )}
+      </div>
       </div>
 
       <div style={{ position: "fixed", left: 0, right: 0, bottom: 16, padding: "0 24px", maxWidth: 560, margin: "0 auto", zIndex: 20 }}>

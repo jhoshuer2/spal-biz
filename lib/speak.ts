@@ -34,6 +34,12 @@ let onProblem: ((what: string, ctx: Record<string, unknown>) => void) | null = n
 /** Give the voice what it needs to ask the server for speech, and where to report trouble. */
 export function setupSpeech(token: () => Promise<string>, problem?: (what: string, ctx: Record<string, unknown>) => void) { getToken = token; onProblem = problem ?? null; }
 
+const listeners = new Set<(on: boolean) => void>();
+let speakingNow = false;
+const setSpeaking = (on: boolean) => { if (on !== speakingNow) { speakingNow = on; listeners.forEach((f) => f(on)); } };
+/** Know when Spal is talking, so its face can show it. Returns a way to stop listening. */
+export function onSpeaking(f: (on: boolean) => void) { listeners.add(f); return () => { listeners.delete(f); }; }
+
 let serverOk = true; // switched off for the rest of the visit if the server cannot do speech
 let reported = false;
 let gen = 0; // every new line of speech cancels the older one
@@ -51,6 +57,7 @@ export function unlockSpeech() {
 
 export function stopSpeaking() {
   gen++;
+  setSpeaking(false);
   try { audio?.pause(); } catch { /* ignore */ }
   try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
 }
@@ -79,14 +86,14 @@ function play(url: string, mine: number): Promise<boolean> {
   return new Promise((resolve) => {
     const a = el();
     let done = false;
-    const end = (ok: boolean) => { if (done) return; done = true; clearTimeout(timer); a.removeEventListener("ended", onEnd); a.removeEventListener("pause", onEnd); a.removeEventListener("error", onErr); resolve(ok); };
+    const end = (ok: boolean) => { if (done) return; done = true; setSpeaking(false); clearTimeout(timer); a.removeEventListener("ended", onEnd); a.removeEventListener("pause", onEnd); a.removeEventListener("error", onErr); resolve(ok); };
     const onEnd = () => end(true);
     const onErr = () => end(false);
     const timer = setTimeout(() => end(true), 25_000);
     a.addEventListener("ended", onEnd); a.addEventListener("pause", onEnd); a.addEventListener("error", onErr);
     a.src = url;
     if (mine !== gen) return end(false);
-    a.play().catch(() => end(false)); // blocked until her first tap: the caller decides what to do
+    a.play().then(() => { if (!done) setSpeaking(true); }).catch(() => end(false)); // blocked until her first tap: the caller decides what to do
   });
 }
 
@@ -102,9 +109,9 @@ function phoneVoice(text: string): Promise<boolean> {
       if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = "en-GB";
       u.rate = 0.95;
       let started = false, done = false;
-      const end = () => { if (!done) { done = true; clearTimeout(timer); resolve(started); } };
+      const end = () => { if (!done) { done = true; setSpeaking(false); clearTimeout(timer); resolve(started); } };
       const timer = setTimeout(end, Math.min(12_000, 2500 + text.length * 85));
-      u.onstart = () => { started = true; }; u.onend = end; u.onerror = end;
+      u.onstart = () => { started = true; setSpeaking(true); }; u.onend = end; u.onerror = end;
       setTimeout(() => { try { synth.resume(); synth.speak(u); } catch { end(); } }, 80);
     } catch { resolve(false); }
   });

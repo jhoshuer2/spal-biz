@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { Button, Chip, DeltaPill, Icon, ListRow, Orb, ProposalCard, Roll, Segmented, Sheet, Surface, TabBar, TalkButton, TextField, Toggle, type Place } from "@/components/ui";
 import type { OrbState, OrbTone } from "@/components/ui/Orb";
+import { SpalFace } from "@/components/app/SpalFace";
 import { Thread } from "@/components/app/Thread";
 import { Dock } from "@/components/app/Dock";
 import type { Msg } from "@/lib/thread";
@@ -213,6 +214,10 @@ export default function DesignPage() {
       </Section>
 
       <Section title="The conversation">
+        <div style={{ maxWidth: 430, border: "1px solid var(--line)", borderRadius: 32, overflow: "hidden", marginBottom: 24, background: "var(--bg)" }}>
+          <SpalFace state="idle" level={0} evening={false} pills={[{ id: "sold", label: "Sold today", value: "₦48,500" }, { id: "spent", label: "Spent today", value: "₦12,000" }, { id: "owed", label: "Owed to you", value: "₦18,400" }]} onPill={() => {}} header={<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span className="head" style={{ fontSize: 24 }}>Spal</span><button className="icon-btn" aria-label="Profile"><Icon name="user" /></button></div>} />
+          <div style={{ padding: "12px 16px" }}><Thread msgs={THREAD.slice(0, 4)} live={null} lastResultId="3" greetWaiting={false} onUndo={() => {}} onAnswer={() => {}} onReplay={() => {}} onFill={() => {}} onSkip={() => {}} /></div>
+        </div>
         <div style={{ maxWidth: 430 }}>
           <Thread msgs={THREAD} live={{ kind: "listening", title: "I'm listening", sub: "Talk like you would to a friend. When you're done, tap the green button." }} lastResultId="3" greetWaiting={true} onUndo={() => {}} onAnswer={() => {}} onReplay={() => {}} onFill={() => {}} onSkip={() => {}} />
           <div style={{ display: "grid", gap: 24, marginTop: 24 }}>
