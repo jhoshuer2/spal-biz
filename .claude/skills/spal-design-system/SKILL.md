@@ -221,7 +221,7 @@ Direction from Joshua, 2026-11-18, after studying Praktika: the conversation is 
 Short on purpose: a welcome, then three questions, then straight into the first conversation. No quiz, no stats, no permission pop-ups at the door.
 
 - **Welcome** (`components/app/Onboarding.tsx`): Spal's face fills the top, one headline ("Your shop's assistant"), one promise line, **Get started** and **I already use Spal**.
-- **Three questions asked by Spal's face**, each a bubble under a compact face with a progress bar and back arrow: her name, what she sells (tap up to three tiles, "Something else" to type), her shop's name (optional, defaults to "Name's shop"). Spal says each question out loud from recorded lines in `public/spal/voice/` (the tap on the previous button lets the phone play sound), and the talking clip plays while she speaks.
+- **Three questions asked by Spal's face**, each a bubble under a compact face with a progress bar and back arrow: her name, what she sells (tap up to three tiles, "Something else" to type), her shop's name (optional, defaults to "Name's shop"). Spal says each question out loud from recorded lines in `public/spal/voice/` (the tap on the previous button lets the phone play sound). Each line has its own lip-synced clip (`q-name.mp4`, `q-sells.mp4`, `q-shop.mp4`, made from that exact audio) that `SpalFace` keeps in step with the voice. Any new fixed line needs its own clip, or it falls back to the generic talking loop.
 - Her private account is made quietly when she taps **Let's go**. Microphone and reminder permissions are asked later, in context, never here.
 
 ## 11c. The first sale, and putting Spal on the phone
