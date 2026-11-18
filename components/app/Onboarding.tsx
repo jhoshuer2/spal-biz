@@ -18,6 +18,7 @@ const TILES = [
   { id: "other", em: "✨", label: "Something else" },
 ];
 const LINES = ["", "/spal/voice/q-name.mp3", "/spal/voice/q-sells.mp3", "/spal/voice/q-shop.mp3"];
+const CLIPS = ["", "/spal/voice/q-name.mp4", "/spal/voice/q-sells.mp4", "/spal/voice/q-shop.mp4"];
 const WORDS = ["", "Hi, I'm Spal. I'll keep your shop's book, so you never lose track of your money. What should I call you?", "Lovely to meet you. What do you sell?", "And what is your shop called?"];
 
 /**
@@ -49,6 +50,9 @@ export function Onboarding({ onDone, error, busy }: { onDone: (a: Answers) => vo
     if (w.__early === "signin") { w.__early = null; setSignin(true); prepare(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The three question clips are small; fetch them quietly while she reads the welcome so each one starts at once.
+  useEffect(() => { const t = setTimeout(() => CLIPS.filter(Boolean).forEach((c) => fetch(c).catch(() => {})), 1500); return () => clearTimeout(t); }, []);
 
   // Spal asks each question out loud when she arrives on it (her tap on the previous button lets the phone play sound).
   useEffect(() => { if (step > 0 && LINES[step]) playLine(LINES[step], WORDS[step]); return () => stopSpeaking(); }, [step]);
@@ -93,7 +97,7 @@ export function Onboarding({ onDone, error, busy }: { onDone: (a: Answers) => vo
             <button className="ob-back" aria-label="Back" disabled={busy} onClick={() => setStep(step - 1)}><span style={{ display: "grid", transform: "rotate(180deg)" }}><Icon name="chevron" size={22} /></span></button>
             <div className="ob-progress" aria-hidden="true">{[1, 2, 3].map((n) => <span key={n} className="ob-seg" data-on={n <= step} />)}</div>
           </div>
-          <SpalFace size="compact" state={busy ? "thinking" : "idle"} level={0} evening={false} pills={[]} onPill={() => {}} status={false} />
+          <SpalFace size="compact" state={busy ? "thinking" : "idle"} level={0} evening={false} pills={[]} onPill={() => {}} status={false} lip={CLIPS[step]} />
           <div className="ob-body">
             <div className="bubble spal" key={step} style={{ maxWidth: "100%" }}><span>{q}</span></div>
             {step === 1 && <TextField key="n" value={name} onChange={setName} placeholder="Your name" onSubmit={next} autoFocus name="name" />}

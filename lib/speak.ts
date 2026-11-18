@@ -85,6 +85,9 @@ export function unlockSpeech() {
   try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; window.speechSynthesis?.speak(u); } catch { /* ignore */ }
 }
 
+/** Where the voice is right now, in seconds, so a video can stay in step with it. */
+export const speechClock = () => (audio && !audio.paused ? audio.currentTime : 0);
+
 export function stopSpeaking() {
   gen++;
   setSpeaking(false);
